@@ -36,7 +36,7 @@ const STAGES = [
   {id:'s2',kind:'spell', name:'つづるマス',ic:'✍️',x:70,y:73,desc:'文字をならべて、単語を作ろう'},
   {id:'s3',kind:'speak', name:'話すマス',ic:'🎤',x:32,y:59,desc:'声に出して言ってみよう'},
   {id:'s4',kind:'talk',  name:'会話マス',ic:'💬',x:72,y:45,desc:'聞かれたことに答えよう'},
-  {id:'s5',kind:'review',name:'宝箱マス',ic:'🎁',x:34,y:31,desc:'まちがえた問題をもう一度。コイン2倍'},
+  {id:'s5',kind:'review',name:'宝箱マス',ic:'🎁',x:34,y:31,desc:'まちがえた問題をもう一度ちょうせん'},
   {id:'boss',kind:'boss',name:'門番ガニ',ic:'🦀',x:60,y:13,desc:'まとめのバトル。ハートは3つ'}
 ];
 const NEXT_ISLES = [
