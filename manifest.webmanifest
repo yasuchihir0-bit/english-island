@@ -1,0 +1,9 @@
+{
+  "name": "English アイランド",
+  "short_name": "English島",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#e7f4fa",
+  "theme_color": "#2477b3",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

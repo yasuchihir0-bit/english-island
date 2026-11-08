@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>English アイランド</title>
+<meta name="description" content="小学5・6年生向けの英語学習ゲーム。島のマップを進んで、なかまを集めよう。">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="English島">
+<meta name="theme-color" content="#2477b3">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <h1 id="title">English アイランド</h1>
+    <span class="pill" title="れんぞく日数">🔥 <span id="streak">0</span>日</span>
+    <span class="pill" title="コイン">🪙 <span id="coins">0</span></span>
+  </header>
+  <main id="view"></main>
+</div>
+<div class="tabs"><nav>
+  <button data-tab="map" aria-current="page"><span>🗺️</span>マップ</button>
+  <button data-tab="gacha"><span>🎰</span>ガチャ</button>
+  <button data-tab="zukan"><span>📖</span>ずかん</button>
+</nav></div>
+<section class="quiz" id="quiz" hidden></section>
+<script src="js/app.js"></script>
+</body>
+</html>
