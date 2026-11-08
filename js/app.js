@@ -30,32 +30,83 @@ const TALK = [
   {q:'How do you spell your name?',situ:'あなたの名前は Ken',e:'✏️',a:'K, E, N.',w:['I like Ken.','Nice to meet you.']}
 ];
 const SPELL = ['dog','cat','red','bear','milk','blue','apple','pizza'];
+
+/* ===== 島2：にぎわい市場（できること・ほしいもの）===== */
+for (const w of Object.values(WORDS)) w.isl = 1;
+Object.assign(WORDS, {
+  swim:{en:'swim',ja:'泳ぐ',e:'🏊',can:'泳げる',cant:'泳げない'}, cook:{en:'cook',ja:'料理する',e:'🍳',can:'料理できる',cant:'料理できない'},
+  sing:{en:'sing',ja:'歌う',e:'🎤',can:'歌える',cant:'歌えない'}, dance:{en:'dance',ja:'おどる',e:'💃',can:'おどれる',cant:'おどれない'},
+  skate:{en:'skate',ja:'スケートをする',e:'⛸️',can:'スケートができる',cant:'スケートができない'},
+  piano:{en:'play the piano',ja:'ピアノをひく',e:'🎹',can:'ピアノをひける',cant:'ピアノをひけない'},
+  bike:{en:'ride a bike',ja:'自転車に乗る',e:'🚲',can:'自転車に乗れる',cant:'自転車に乗れない'},
+  runfast:{en:'run fast',ja:'速く走る',e:'🏃',can:'速く走れる',cant:'速く走れない'},
+  hat:{en:'hat',ja:'ぼうし',e:'👒',obj:'a hat'}, cap:{en:'cap',ja:'キャップ',e:'🧢',obj:'a cap'}, bag:{en:'bag',ja:'かばん',e:'🎒',obj:'a bag'},
+  shoes:{en:'shoes',ja:'くつ',e:'👟',obj:'new shoes'}, tshirt:{en:'T-shirt',ja:'Tシャツ',e:'👕',obj:'a T-shirt'},
+  pencil:{en:'pencil',ja:'えんぴつ',e:'✏️',obj:'a pencil'}, notebook:{en:'notebook',ja:'ノート',e:'📓',obj:'a notebook'}, ruler:{en:'ruler',ja:'じょうぎ',e:'📏',obj:'a ruler'},
+  hamburger:{en:'hamburger',ja:'ハンバーガー',e:'🍔',obj:'a hamburger'}, icecream:{en:'ice cream',ja:'アイスクリーム',e:'🍦',obj:'ice cream'},
+  cake:{en:'cake',ja:'ケーキ',e:'🍰',obj:'a cake'}, juice:{en:'juice',ja:'ジュース',e:'🧃',obj:'juice'}, sandwich:{en:'sandwich',ja:'サンドイッチ',e:'🥪',obj:'a sandwich'}
+});
+for (const w of Object.values(WORDS)) w.isl = w.isl || 2;
+GROUPS.push(['swim','cook','sing','dance','skate','piano','bike','runfast'], ['hat','cap','bag','shoes','tshirt'],
+  ['pencil','notebook','ruler','bag'], ['hamburger','icecream','cake','juice','sandwich']);
+for (const s of SPEAK) s.isl = 1;
+SPEAK.push(
+  {en:'I can swim.',ja:'わたしは泳げます。',e:'🏊',isl:2}, {en:"I can't cook.",ja:'わたしは料理ができません。',e:'🍳',isl:2},
+  {en:'Can you skate?',ja:'あなたはスケートができますか？',e:'⛸️',isl:2}, {en:'I want a new bag.',ja:'新しいかばんがほしいです。',e:'🎒',isl:2},
+  {en:'How much is it?',ja:'それはいくらですか？',e:'💴',isl:2});
+for (const t of TALK) t.isl = 1;
+TALK.push(
+  {q:'Can you swim?',situ:'あなたは 🏊 泳げる',e:'🏊',a:'Yes, I can.',w:["No, I can't.",'I want a cake.'],isl:2},
+  {q:'Can you play the piano?',situ:'あなたは 🎹 ピアノがひけない',e:'🎹',a:"No, I can't.",w:['Yes, I can.','I want a bag.'],isl:2},
+  {q:'What can you do?',situ:'あなたは 💃 おどれる',e:'🤸',a:'I can dance.',w:["No, I can't.",'I like dogs.'],isl:2},
+  {q:'What do you want?',situ:'あなたは 🍔 がほしい',e:'🛒',a:'I want a hamburger.',w:['I can cook.','Yes, I do.'],isl:2},
+  {q:'What would you like?',situ:'レストランで 🍦 をたのみたい',e:'🍽️',a:"I'd like ice cream.",w:['I can skate.','Yes, I can.'],isl:2},
+  {q:'How much is it?',situ:'ねだんは 300円',e:'💴',a:"It's 300 yen.",w:['I want a cap.','Yes, I can.'],isl:2},
+  {q:'Here you are.',situ:'お店の人が 品物をわたしてくれた',e:'🎁',a:'Thank you.',w:["You're welcome.",'I can sing.'],isl:2});
+SPELL.push('hat','cap','bag','cake','swim','sing','cook','juice');
 /* 文を聞いて絵をえらぶ：好き（like）／好きじゃない（not）／好き？と聞く（ask）の聞き分け */
 const PL = {apple:'apples',banana:'bananas',orange:'oranges',strawberry:'strawberries',melon:'melons',dog:'dogs',cat:'cats',rabbit:'rabbits',bear:'bears'};
-const HEAR = [{w:'apple',p:'like'},{w:'milk',p:'not'},{w:'cat',p:'ask'},{w:'soccer',p:'like'},{w:'dog',p:'not'},{w:'strawberry',p:'ask'},{w:'blue',p:'like'},{w:'pizza',p:'not'}];
-const POL = {
-  like:{mark:'⭕', en:o => `I like ${o}.`,       ja:j => `${j}が好き`},
-  not: {mark:'❌', en:o => `I don't like ${o}.`, ja:j => `${j}が好きじゃない`},
-  ask: {mark:'❓', en:o => `Do you like ${o}?`,  ja:j => `${j}は好き？と聞いている`}
+/* p：like＝肯定（⭕）／not＝否定（❌）／ask＝質問（❓）。set：どの言い方か */
+const HEAR = [{w:'apple',p:'like'},{w:'milk',p:'not'},{w:'cat',p:'ask'},{w:'soccer',p:'like'},{w:'dog',p:'not'},{w:'strawberry',p:'ask'},{w:'blue',p:'like'},{w:'pizza',p:'not'},
+  {w:'swim',p:'like',set:'can'},{w:'cook',p:'not',set:'can'},{w:'skate',p:'ask',set:'can'},{w:'piano',p:'not',set:'can'},
+  {w:'hat',p:'like',set:'want'},{w:'juice',p:'ask',set:'want'},{w:'bike',p:'like',set:'can'},{w:'cake',p:'not',set:'want'}];
+const MARK = {like:'⭕', not:'❌', ask:'❓'};
+const SETS = {
+  like:{legend:'⭕ 好き　❌ 好きじゃない　❓ 好き？と聞いている', o:w => PL[w] || WORDS[w].en,
+    en:{like:o => `I like ${o}.`, not:o => `I don't like ${o}.`, ask:o => `Do you like ${o}?`},
+    ja:{like:w => `${WORDS[w].ja}が好き`, not:w => `${WORDS[w].ja}が好きじゃない`, ask:w => `${WORDS[w].ja}は好き？と聞いている`}},
+  can:{legend:'⭕ できる　❌ できない　❓ できる？と聞いている', o:w => WORDS[w].en,
+    en:{like:o => `I can ${o}.`, not:o => `I can't ${o}.`, ask:o => `Can you ${o}?`},
+    ja:{like:w => WORDS[w].can, not:w => WORDS[w].cant, ask:w => `${WORDS[w].can}？と聞いている`}},
+  want:{legend:'⭕ ほしい　❌ ほしくない　❓ ほしい？と聞いている', o:w => WORDS[w].obj || WORDS[w].en,
+    en:{like:o => `I want ${o}.`, not:o => `I don't want ${o}.`, ask:o => `Do you want ${o}?`},
+    ja:{like:w => `${WORDS[w].ja}がほしい`, not:w => `${WORDS[w].ja}はほしくない`, ask:w => `${WORDS[w].ja}がほしい？と聞いている`}}
 };
-const hearSent = h => POL[h.p].en(PL[h.w] || WORDS[h.w].en);
+for (const h of HEAR){ h.set = h.set || 'like'; h.isl = WORDS[h.w].isl; }
+const hearSent = h => SETS[h.set].en[h.p](SETS[h.set].o(h.w));
+const hearJa = (set, c) => SETS[set].ja[c.p](c.w);
 
-const STAGES = [
-  {id:'s1',kind:'listen',name:'聞くマス',ic:'🔊',x:28,y:86,desc:'英語の単語や文を聞いて、合う絵をえらぼう'},
-  {id:'s2',kind:'spell', name:'つづるマス',ic:'✍️',x:70,y:73,desc:'文字や単語をならべて、英語を作ろう'},
-  {id:'s3',kind:'speak', name:'話すマス',ic:'🎤',x:32,y:59,desc:'声に出して言ってみよう'},
-  {id:'s4',kind:'talk',  name:'会話マス',ic:'💬',x:72,y:45,desc:'聞かれたことに答えよう'},
-  {id:'s5',kind:'review',name:'宝箱マス',ic:'🎁',x:34,y:31,desc:'苦手な問題を集中トレーニング'},
-  {id:'boss',kind:'boss',name:'門番ガニ',ic:'🦀',x:60,y:13,desc:'まとめのバトル。ハートは3つ'}
+/* マスの形は島ごとに同じ。mirror の島は左右反対の道になる */
+const STAGE_BASE = [
+  {k:'1',kind:'listen',name:'聞くマス',ic:'🔊',x:28,y:86,desc:'英語の単語や文を聞いて、合う絵をえらぼう'},
+  {k:'2',kind:'spell', name:'つづるマス',ic:'✍️',x:70,y:73,desc:'文字や単語をならべて、英語を作ろう'},
+  {k:'3',kind:'speak', name:'話すマス',ic:'🎤',x:32,y:59,desc:'声に出して言ってみよう'},
+  {k:'4',kind:'talk',  name:'会話マス',ic:'💬',x:72,y:45,desc:'聞かれたことに答えよう'},
+  {k:'5',kind:'review',name:'宝箱マス',ic:'🎁',x:34,y:31,desc:'苦手な問題を集中トレーニング'},
+  {k:'boss',kind:'boss',x:60,y:13,desc:'まとめのバトル。ハートは3つ'}
 ];
-const NEXT_ISLES = [
-  {ic:'🏘️',n:'はじまりの村',d:'5年｜あいさつ・好きなもの',on:true},
-  {ic:'🏪',n:'にぎわい市場',d:'5年｜できること・ほしいもの'},
-  {ic:'🕰️',n:'時計の塔',d:'5年｜時こく・1日の生活'},
-  {ic:'⚓',n:'旅立ちの港',d:'6年｜行きたい国・町しょうかい'},
-  {ic:'🌲',n:'思い出の森',d:'6年｜夏休み・小学校の思い出'},
-  {ic:'⛰️',n:'ゆめの山',d:'6年｜なりたい職業・中学校でしたいこと'}
+const ISLANDS = [
+  {id:1, prefix:'s', ic:'🏘️', name:'はじまりの村', d:'5年｜あいさつ・好きなもの', boss:{name:'門番ガニ',ic:'🦀'}},
+  {id:2, prefix:'m', ic:'🏪', name:'にぎわい市場', d:'5年｜できること・ほしいもの', boss:{name:'タコ店長',ic:'🐙'}, mirror:true},
+  {id:3, ic:'🕰️', name:'時計の塔', d:'5年｜時こく・1日の生活'},
+  {id:4, ic:'⚓', name:'旅立ちの港', d:'6年｜行きたい国・町しょうかい'},
+  {id:5, ic:'🌲', name:'思い出の森', d:'6年｜夏休み・小学校の思い出'},
+  {id:6, ic:'⛰️', name:'ゆめの山', d:'6年｜なりたい職業・中学校でしたいこと'}
 ];
+for (const I of ISLANDS) if (I.prefix) I.stages = STAGE_BASE.map(b => Object.assign({}, b, {
+  id: b.k === 'boss' ? (I.id === 1 ? 'boss' : I.prefix + 'boss') : I.prefix + b.k, isl: I.id,
+  x: I.mirror ? 100 - b.x : b.x, name: b.k === 'boss' ? I.boss.name : b.name, ic: b.k === 'boss' ? I.boss.ic : b.ic }));
+const STAGES = ISLANDS[0].stages;   // 島1（テストや古いデータとの互換用）
 const PALS = [
   {id:'chick',en:'chick',ja:'ひよこ',e:'🐤',r:'N'},{id:'frog',en:'frog',ja:'かえる',e:'🐸',r:'N'},
   {id:'hamster',en:'hamster',ja:'ハムスター',e:'🐹',r:'N'},{id:'turtle',en:'turtle',ja:'かめ',e:'🐢',r:'N'},
@@ -79,11 +130,12 @@ const LV_NAME = ['はじめて','聞いてわかる','見てわかる','言え�
 const INTERVAL = [0,1,3,7,14];
 const SENTENCES = SPEAK.filter(s => s.en.includes(' '));
 const ITEMS = [...Object.keys(WORDS).map(k => 'w:'+k), ...HEAR.map((_,i) => 'l:'+i), ...SENTENCES.map((_,i) => 's:'+i), ...TALK.map((_,i) => 't:'+i)];
+function itemIsl(id){ const [t,k] = id.split(':'); return (t === 'w' ? WORDS[k] : t === 'l' ? HEAR[k] : t === 's' ? SENTENCES[k] : TALK[k]).isl; }
 
 /* ---------- state ---------- */
 const KEY = 'english-island-v1';
 const today = () => { const d = new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
-function fresh(){ return {tickets:1,pts:0,m:{},rev:{d:''},log:{},stars:{},owned:{},shards:0,study:{d:'',sec:0},streak:{last:'',n:0},partner:null}; }
+function fresh(){ return {isl:1,tickets:1,pts:0,m:{},rev:{d:''},log:{},stars:{},owned:{},shards:0,study:{d:'',sec:0},streak:{last:'',n:0},partner:null}; }
 let S = fresh();
 try { const raw = localStorage.getItem(KEY); if (raw){ const old = JSON.parse(raw);
   if (old.tickets === undefined && typeof old.coins === 'number') old.tickets = Math.max(1, Math.floor(old.coins / 50));
@@ -112,7 +164,7 @@ function itemInfo(id){
   const [t,k] = id.split(':');
   if (t === 'w') return WORDS[k];
   if (t === 's') return SENTENCES[k];
-  if (t === 'l'){ const h = HEAR[k], w = WORDS[h.w]; return {en:hearSent(h), ja:POL[h.p].ja(w.ja), e:w.e}; }
+  if (t === 'l'){ const h = HEAR[k]; return {en:hearSent(h), ja:hearJa(h.set, h), e:WORDS[h.w].e}; }
   return {en:TALK[k].q, ja:'答え：' + TALK[k].a, e:TALK[k].e};
 }
 function dueItems(){
@@ -210,7 +262,15 @@ function render(){
 }
 
 /* ---------- map ---------- */
-/* map scenery: x/y in % of the map, size in px; kept clear of the stage path */
+/* map scenery: x/y in % of the map, size in px; kept clear of the stage path（mirror の島では左右反対に置く） */
+const SKY = [['☀️',90,5,28,'day'],['🌙',90,5,26,'night'],['✨',28,4,14,'night twinkle'],['✨',74,16,12,'night twinkle'],['✨',10,24,12,'night twinkle'],
+  ['☁️',22,4,30,'cloud'],['☁️',66,3,22,'cloud c2']];
+const SCENERY2 = [...SKY,
+  ['🚢',6,12,28,'bob'],['🐳',90,95,30,'bob'],['🐟',5,93,18,'bob'],['🐬',95,70,20,'bob'],
+  ['🏪',86,27,30,''],['🏬',13,46,28,''],['🎪',88,58,30,''],['⛺',15,31,26,''],['🎈',8,38,22,'bob'],
+  ['🌴',91,44,28,'sway'],['🏮',9,66,22,'sway'],['⛲',55,60,20,''],['🧺',47,46,18,''],['🍎',53,48,14,''],
+  ['🛒',48,71,24,''],['🎏',86,84,24,'sway'],['🍞',15,78,18,''],['🌳',78,93,26,''],['🐚',50,95,16,''],
+  ['📦',41,15,20,''],['🎈',25,19,20,'bob'],['🐦',62,33,16,'bob'],['🐈',13,88,18,'']];
 const SCENERY = [
   ['☀️',90,5,28,'day'],['🌙',90,5,26,'night'],['✨',28,4,14,'night twinkle'],['✨',74,16,12,'night twinkle'],['✨',10,24,12,'night twinkle'],
   ['☁️',22,4,30,'cloud'],['☁️',66,3,22,'cloud c2'],
@@ -220,15 +280,15 @@ const SCENERY = [
   ['🐄',48,71,24,''],['🌻',86,84,22,'sway'],['🍄',15,78,18,''],['🌳',78,93,26,''],['🐚',50,95,16,''],
   ['🪨',41,15,20,''],['🌲',25,19,22,''],['🦋',62,33,16,'bob'],['🐿️',13,88,18,'']
 ];
-function terrainSVG(){
-  const pts = STAGES.map(s => (s.x*3)+','+(s.y*4)).join(' L');
+function terrainSVG(I){
+  const pts = I.stages.map(s => (s.x*3)+','+(s.y*4)).join(' L');
   const waves = [[20,24],[250,16],[12,170],[276,140],[284,250],[14,300],[30,392],[230,394]]
     .map(([x,y]) => `<path class="wave" d="M${x} ${y} q6 -5 12 0 t12 0"/>`).join('');
-  return `<svg class="terrain" viewBox="0 0 300 400" aria-hidden="true">${waves}
+  return `<svg class="terrain" viewBox="0 0 300 400" aria-hidden="true">${waves}<g ${I.mirror ? 'transform="translate(300 0) scale(-1 1)"' : ''}>
     <path class="sand" d="M60 34C120 6 222 10 262 42C296 74 292 140 282 190C300 250 296 322 270 360C240 396 150 394 90 382C38 372 12 332 18 280C4 230 14 170 24 120C24 78 34 50 60 34Z"/>
     <path class="grass" d="M72 54C126 28 214 32 248 60C276 88 272 146 262 194C280 250 276 316 254 346C228 376 150 372 96 362C56 352 36 320 40 278C26 230 36 172 44 124C44 90 52 66 72 54Z"/>
     <path class="patch" d="M30 140C40 120 64 116 72 140C78 170 46 196 34 176Z"/><path class="patch" d="M236 300C252 284 272 296 266 318C258 336 232 330 236 300Z"/>
-    <ellipse class="pond" cx="165" cy="242" rx="24" ry="13"/>
+    <ellipse class="pond" cx="165" cy="242" rx="24" ry="13"/></g>
     <path class="road" d="M${pts}"/><path class="dots" d="M${pts}"/></svg>`;
 }
 
@@ -256,35 +316,47 @@ function reviewCard(){
     <span class="sub">わすれかけた問題だけが出るよ。先に復習すると、よく覚えられるよ。ぜんぶ終わると +${PTS.review}pt</span>
     <button class="big" id="rev">はじめる</button></div>`;
 }
-const unlocked = i => i === 0 || S.stars[STAGES[i-1].id] > 0;
+const curIsl = () => ISLANDS.find(I => I.id === S.isl && I.stages) || ISLANDS[0];
+const islOpen = I => !!I.stages && (I.id === 1 || S.stars[ISLANDS[I.id - 2].stages[5].id] > 0);
 function renderMap(){
-  const nextIdx = STAGES.findIndex((s,i) => unlocked(i) && !S.stars[s.id]);
-  const here = STAGES[nextIdx >= 0 ? nextIdx : STAGES.length-1];
+  const I = curIsl(), ST = I.stages;
+  const unlocked = i => i === 0 || S.stars[ST[i-1].id] > 0;
+  const nextIdx = ST.findIndex((s,i) => unlocked(i) && !S.stars[s.id]);
+  const here = ST[nextIdx >= 0 ? nextIdx : ST.length-1];
   const pal = S.partner && PALS.find(p => p.id === S.partner);
+  const scen = (I.id === 1 ? SCENERY : SCENERY2).map(([e,x,y,sz,c]) => [e, I.mirror && !SKY.some(s => s[0] === e && s[1] === x) ? 100 - x : x, y, sz, c]);
   $('#view').innerHTML = `
-    <div class="areahead"><div><h2>🏘️ はじまりの村</h2><p class="sub">5年｜あいさつ・好きなもの</p></div>
-      <span class="tag on">${Object.keys(S.stars).length}/${STAGES.length} クリア</span></div>
+    <div class="areahead"><div><h2>${I.ic} ${I.name}</h2><p class="sub">${I.d}</p></div>
+      <span class="tag on">${ST.filter(s => S.stars[s.id]).length}/${ST.length} クリア</span></div>
     ${reviewCard()}
     ${studyCard()}
-    <div class="map" role="group" aria-label="はじまりの村のマップ">
-      ${terrainSVG()}
-      ${SCENERY.map(([e,x,y,sz,c]) => `<span class="deco ${c}" style="left:${x}%;top:${y}%;font-size:${sz}px">${e}</span>`).join('')}
-      ${STAGES.map((s,i) => {
+    <div class="map ${I.mirror ? 'mirror' : ''}" role="group" aria-label="${I.name}のマップ">
+      ${terrainSVG(I)}
+      ${scen.map(([e,x,y,sz,c]) => `<span class="deco ${c}" style="left:${x}%;top:${y}%;font-size:${sz}px">${e}</span>`).join('')}
+      ${ST.map((s,i) => {
         const lock = !unlocked(i), st = S.stars[s.id] || 0;
         return `<button class="node ${s.kind==='boss'?'boss':''} ${lock?'locked':''} ${i===nextIdx?'next':''}" style="left:${s.x}%;top:${s.y}%" data-i="${i}" aria-label="${s.name}${lock?'（まだ行けない）':''}">
           <span class="disc">${lock ? '🔒' : s.ic}</span><span class="lab">${s.name}</span>
           <span class="st">${st ? '★'.repeat(st) + '☆'.repeat(3-st) : ''}</span></button>`;
       }).join('')}
-      ${pal ? `<span class="partner" style="left:${here.x+13}%;top:${here.y-6}%">${pal.e}</span>` : ''}
+      ${pal ? `<span class="partner" style="left:${here.x + (I.mirror ? -13 : 13)}%;top:${here.y-6}%">${pal.e}</span>` : ''}
     </div>
     <p class="sub">1日1〜2マスずつ進もう。★3つをめざして、何回でもちょうせんできるよ。</p>
-    <h2>つぎの島</h2>
-    <div class="islands">${NEXT_ISLES.map(o => `<div class="isle"><span class="ic">${o.ic}</span><div><b>${o.n}</b><span>${o.d}</span></div><span class="tag ${o.on?'on':''}">${o.on?'いまここ':'じゅんび中'}</span></div>`).join('')}</div>`;
+    <h2>島をえらぶ</h2>
+    <div class="islands">${ISLANDS.map((J,k) => { const open = islOpen(J), on = J.id === I.id;
+      const tag = on ? 'いまここ' : open ? '行ける！' : J.stages ? `🔒 ${ISLANDS[k-1].boss.name}をたおすと行ける` : 'じゅんび中';
+      return `<button class="isle ${on ? 'cur' : ''}" data-isl="${J.id}" ${open && !on ? '' : 'aria-disabled="true"'}><span class="ic">${J.ic}</span><span class="tx"><b>${J.name}</b><span>${J.d}</span></span><span class="tag ${on || open ? 'on' : ''}">${tag}</span></button>`; }).join('')}</div>`;
+  document.querySelectorAll('.isle').forEach(b => b.onclick = () => {
+    const J = ISLANDS.find(x => x.id === +b.dataset.isl);
+    if (J.id === I.id) return;
+    if (!islOpen(J)) return toast(J.stages ? 'まだ行けないよ。前の島の門番をたおそう！' : 'この島はじゅんび中だよ');
+    S.isl = J.id; save(); render(); toast(`${J.name}にとうちゃく！`);
+  });
   document.querySelectorAll('.node').forEach(b => b.onclick = () => {
     const i = +b.dataset.i;
     if (!unlocked(i)) return toast('前のマスをクリアすると行けるよ');
     if (doneToday()) return toast(`今日の勉強は${DAILY_MIN}分でおしまい。また明日ね！`);
-    startStage(STAGES[i]);
+    startStage(ST[i]);
   });
   if ($('#rev')) $('#rev').onclick = () => {
     if (doneToday()) return toast(`今日の勉強は${DAILY_MIN}分でおしまい。また明日ね！`);
@@ -322,7 +394,9 @@ function makeQ(id){
 const ids = (t, list) => list.map(k => t + ':' + k);
 const key = id => id.split(':')[1];
 function build(stage){
-  const W = ids('w', Object.keys(WORDS)), SP = ids('w', SPELL), SE = SENTENCES.map((_,i) => 's:'+i), TA = TALK.map((_,i) => 't:'+i), HE = HEAR.map((_,i) => 'l:'+i);
+  const inIsl = id => itemIsl(id) === stage.isl;
+  const W = ids('w', Object.keys(WORDS)).filter(inIsl), SP = ids('w', SPELL).filter(inIsl), SE = SENTENCES.map((_,i) => 's:'+i).filter(inIsl),
+    TA = TALK.map((_,i) => 't:'+i).filter(inIsl), HE = HEAR.map((_,i) => 'l:'+i).filter(inIsl);
   const spellQ = id => Q.spell(key(id), mOf(id).lv < 3);   // 覚えはじめはお手本つき
   if (stage.kind === 'daily')  return dueItems().slice(0, REVIEW_MAX).map(makeQ);
   if (stage.kind === 'listen') return shuffle([...weakFirst(W).slice(0,5).map(id => Q.listen(key(id))), ...weakFirst(HE).slice(0,3).map(id => Q.hear(+key(id)))]);
@@ -330,7 +404,7 @@ function build(stage){
   if (stage.kind === 'speak')  return shuffle([...weakFirst(SE).slice(0,3).map(id => Q.speak(+key(id))), ...weakFirst(W).slice(0,2).map(id => Q.sayword(key(id)))]);
   if (stage.kind === 'talk')   return weakFirst(TA).slice(0,6).map(id => Q.talk(+key(id)));
   if (stage.kind === 'review'){  // 宝箱マス：苦手なもの（まちがえた回数が多い・段階が低い）を集中
-    const weak = shuffle(ITEMS).sort((a,b) => (mOf(b).wrong - mOf(b).right/3) - (mOf(a).wrong - mOf(a).right/3) || mOf(a).lv - mOf(b).lv);
+    const weak = shuffle(ITEMS.filter(inIsl)).sort((a,b) => (mOf(b).wrong - mOf(b).right/3) - (mOf(a).wrong - mOf(a).right/3) || mOf(a).lv - mOf(b).lv);
     return weak.slice(0,8).map(makeQ);
   }
   return shuffle([...weakFirst(W).slice(0,2).map(id => Q.listen(key(id))), ...weakFirst(HE).slice(0,1).map(id => Q.hear(+key(id))),
@@ -416,9 +490,9 @@ function showQ(){
   }
   else if (q.kind === 'hear'){
     const h = q.h, sent = hearSent(h);
-    const label = c => `<span class="em">${WORDS[c.w].e}<b class="mark">${POL[c.p].mark}</b></span><span class="ja">${POL[c.p].ja(WORDS[c.w].ja)}</span>`;
+    const label = c => `<span class="em">${WORDS[c.w].e}<b class="mark">${MARK[c.p]}</b></span><span class="ja">${hearJa(h.set, c)}</span>`;
     shell(`<span class="kind">🔊 文を聞いてえらぼう</span><p class="prompt">聞こえた文に合うのはどれ？</p>${audioRow()}
-      <p class="sub">⭕ 好き　❌ 好きじゃない　❓ 好き？と聞いている</p>
+      <p class="sub">${SETS[h.set].legend}</p>
       <div class="choices">${q.choices.map((c,i) => `<button class="ch" data-i="${i}">${label(c)}</button>`).join('')}</div>`);
     wireAudio(sent); say(sent);
     const isRight = c => c.w === h.w && c.p === h.p;
@@ -426,7 +500,7 @@ function showQ(){
       const ok = isRight(q.choices[+b.dataset.i]);
       b.classList.add(ok ? 'good' : 'bad');
       if (!ok) document.querySelectorAll('.ch').forEach(x => { if (isRight(q.choices[+x.dataset.i])) x.classList.add('good'); });
-      lockChoices(); answer(ok, `<span class="en">${esc(sent)}</span>（${POL[h.p].ja(WORDS[h.w].ja)}）`, sent);
+      lockChoices(); answer(ok, `<span class="en">${esc(sent)}</span>（${hearJa(h.set, h)}）`, sent);
     });
   }
   else if (q.kind === 'speak'){
@@ -521,7 +595,8 @@ function finish(knocked){
   const msg = s.kind === 'daily' ? (bonus ? `今日の復習ぜんぶおわり！ +${bonus}pt` : '復習おわり！') + ' つぎはマップを進もう。'
     : knocked ? 'ハートがなくなった…。門番ガニにもう一回ちょうせんしよう！'
     : stars === 0 ? 'あと少し！6わり正かいでクリアだよ。'
-    : s.kind === 'boss' ? 'はじまりの村をクリア！ つぎの島は じゅんび中だよ。' : first ? 'つぎのマスへ進めるようになったよ！' : 'クリア！';
+    : s.kind === 'boss' ? (() => { const I = ISLANDS[s.isl - 1], N = ISLANDS[s.isl];
+        return `${I.name}をクリア！ ` + (N && N.stages ? `「${N.ic} ${N.name}」に行けるようになったよ！ 下の「島をえらぶ」から行ってみよう。` : 'つぎの島はじゅんび中だよ。'); })() : first ? 'つぎのマスへ進めるようになったよ！' : 'クリア！';
   $('#quiz').innerHTML = `<div class="qbody"><div class="result">
     <div class="stars" aria-label="星 ${stars}">${[0,1,2].map(i => i < stars ? '★' : '<span class="off">★</span>').join('')}</div>
     <h2>${s.ic} ${s.name}</h2><p>${run.right} / ${run.base} 問 正かい</p><p>${msg}</p>
@@ -575,14 +650,15 @@ function renderGacha(last){
 /* ---------- zukan ---------- */
 function renderZukan(){
   const got = PALS.filter(p => S.owned[p.id]).length;
-  const count = n => ITEMS.filter(id => mOf(id).lv >= n).length;
+  const OPEN = ITEMS.filter(id => islOpen(ISLANDS[itemIsl(id) - 1]));
+  const count = n => OPEN.filter(id => mOf(id).lv >= n).length;
   $('#view').innerHTML = `
     <div class="stats"><div class="stat"><b>${count(4)}</b><span>👑 マスター</span></div>
-      <div class="stat"><b>${count(1)}/${ITEMS.length}</b><span>出会った問題</span></div>
+      <div class="stat"><b>${count(1)}/${OPEN.length}</b><span>出会った問題</span></div>
       <div class="stat"><b>${got}/${PALS.length}</b><span>なかま</span></div></div>
     <div><h2>覚えぐあい</h2><p class="sub">正解すると1つずつ上がるよ。間をあけて何回も思い出すと、👑マスターになるよ。</p></div>
     <div class="legend">${LV.map((e,i) => `<span>${e} ${LV_NAME[i]}</span>`).join('')}</div>
-    <div class="mlist">${ITEMS.slice().sort((a,b) => mOf(b).lv - mOf(a).lv).map(id => { const it = itemInfo(id), m = mOf(id);
+    <div class="mlist">${OPEN.slice().sort((a,b) => mOf(b).lv - mOf(a).lv).map(id => { const it = itemInfo(id), m = mOf(id);
       return `<button class="mrow" data-say="${esc(it.en)}"><span class="lv">${LV[m.lv]}</span><span class="em">${it.e}</span>
         <span class="tx"><b class="en">${esc(it.en)}</b><span>${esc(it.ja)}</span></span></button>`; }).join('')}</div>
     <div><h2>なかまずかん</h2><p class="sub">タップすると英語の名前が聞けるよ。もう一度タップでマップにつれていけるよ。</p></div>

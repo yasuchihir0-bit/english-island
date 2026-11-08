@@ -31,7 +31,7 @@ async function answerOne(p, right = true) {
   return q.kind;
 }
 async function playStage(p, idx, wrongFirst = 0) {
-  await p.evaluate(i => { S.study.sec = 0; startStage(i === 'daily' ? DAILY_STAGE : STAGES[i]); }, idx);
+  await p.evaluate(i => { S.study.sec = 0; startStage(i === 'daily' ? DAILY_STAGE : typeof i === 'string' ? ISLANDS[1].stages[+i[1]] : STAGES[i]); }, idx);
   const kinds = new Set(); let i = 0;
   while (await p.isVisible('.qbody .kind')) { kinds.add(await answerOne(p, i++ >= wrongFirst)); }
   return { text: (await p.textContent('.result')).replace(/\s+/g, ' '), kinds: [...kinds], answered: i };
@@ -50,6 +50,19 @@ async function playStage(p, idx, wrongFirst = 0) {
     check(/★★★/.test(r.text) && !/off/.test(await p.innerHTML('.stars')), `${r.text.slice(0, 40)}（${r.kinds.join(',')}）`);
     await p.click('#toMap');
   }
+  // 1b. 島1の門番をたおすと島2に行ける → 島2の全部のマス（島2の問題だけが出る）
+  await p.evaluate(() => render());
+  check(await p.isVisible('.isle[data-isl="2"]:not([aria-disabled])'), '島1クリアで「にぎわい市場」が選べる');
+  await p.click('.isle[data-isl="2"]');
+  check((await p.textContent('.areahead h2')).includes('にぎわい市場'), '島2に切りかわる');
+  for (let si = 0; si < 6; si++) {
+    const only2 = await p.evaluate(i => build(ISLANDS[1].stages[i]).every(q => itemIsl(q.id) === 2), si);
+    const r = await playStage(p, 'i' + si);
+    check(only2 && /★★★/.test(r.text) && !/off/.test(await p.innerHTML('.stars')), `島2 ${r.text.slice(0, 34)}（${r.kinds.join(',')}）`);
+    await p.click('#toMap');
+  }
+  check(/島1|島2/.test('島2') && (await p.textContent('.map')).includes('タコ店長'), '島2のボスはタコ店長');
+  await p.evaluate(() => { S.isl = 1; save(); render(); });
   // 2. まちがえた問題は最後にもう一回出る
   const r2 = await playStage(p, 0, 2);
   check(r2.answered === 10 && /6 \/ 8/.test(r2.text), `聞くマスで2問まちがえる → やり直しをふくめて ${r2.answered} 問、${r2.text.match(/\d+ \/ \d+/)[0]} 正かい`);
