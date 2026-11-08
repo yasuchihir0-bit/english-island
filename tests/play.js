@@ -7,14 +7,21 @@ const check = (ok, msg) => { console.log((ok ? 'OK  ' : 'NG  ') + msg); if (!ok)
 
 // 今の問題に答える（right=false ならわざとまちがえる）
 async function answerOne(p, right = true) {
-  const q = await p.evaluate(() => { const q = run.qs[run.i]; return {kind:q.kind, key:q.key, ans:q.t ? q.choices.indexOf(q.t.a) : null, choices:q.choices || null}; });
+  const q = await p.evaluate(() => { const q = run.qs[run.i]; return {kind:q.kind, key:q.key,
+    ans: q.t ? q.choices.indexOf(q.t.a) : q.h ? q.choices.findIndex(c => c.w === q.h.w && c.p === q.h.p) : null,
+    words: q.kind === 'order' ? q.it.en.split(' ') : null, choices:q.choices || null}; });
   if (q.kind === 'listen' || q.kind === 'read') {
     const k = right ? q.key : q.choices.find(c => c !== q.key);
     await p.click(`.ch[data-k="${k}"]`);
   } else if (q.kind === 'talk') await p.click(`.ch[data-i="${right ? q.ans : (q.ans + 1) % 3}"]`);
+  else if (q.kind === 'hear') await p.click(`.ch[data-i="${right ? q.ans : (q.ans + 1) % 4}"]`);
+  else if (q.kind === 'order') {
+    const ws = right ? q.words : q.words.slice().reverse();
+    for (const w of ws) await p.click(`#tiles .tile:not(.used) >> text="${w}"`);
+  }
   else if (q.kind === 'spell') {
     const word = right ? q.key : q.key.split('').reverse().join('');
-    for (const c of word) await p.click(`.tile:not(.used) >> text="${c}"`);
+    for (const c of word) await p.click(`#tiles .tile:not(.used) >> text="${c}"`);
     if (!right && word === q.key) return answerOne(p, true);
   } else if (q.kind === 'speak') {
     if (!right) { await p.click('#mic').catch(()=>{}); }
@@ -64,11 +71,18 @@ async function playStage(p, idx, wrongFirst = 0) {
   // 5. 同じ日に何回正解しても、段階は1つしか上がらない
   const same = await p.evaluate(() => { const id = 'w:melon'; delete S.m[id]; for (let i = 0; i < 4; i++) grade({id}, true); return S.m[id].lv; });
   check(same === 1, `同じ日に4回正解 → 段階 ${same}`);
-  // 6. 1日の上限
+  // 6. お手本を見たときは、正解でも段階が上がらない
+  const hint = await p.evaluate(() => { const id = 'w:pizza'; delete S.m[id]; grade({id, hinted:true}, true); return mOf(id).lv; });
+  check(hint === 0, `お手本を見て正解 → 段階 ${hint}（上がらない）`);
+  // 7. 段階に合わせて問題の形が変わる
+  const forms = await p.evaluate(() => [0,1,2,3,4].map(lv => { S.m['w:dog'] = {lv, due:0, right:0, wrong:0}; return makeQ('w:dog').kind; }).join('→')
+    + ' / ' + [0,2].map(lv => { S.m['s:0'] = {lv, due:0, right:0, wrong:0}; return makeQ('s:0').kind; }).join('→'));
+  check(forms === 'listen→listen→read→speak→spell / order→speak', `問題の形：単語 ${forms}`);
+  // 8. 1日の上限
   await p.evaluate(() => { S.study.sec = DAILY_MIN * 60; save(); render(); });
   await p.click('.node[data-i="0"]');
   check(!(await p.isVisible('#quiz')), '60分をこえたらマスに入れない');
-  // 7. 古いデータ（コイン・おぼえた単語・まちがえた問題）の引きつぎ
+  // 9. 古いデータ（コイン・おぼえた単語・まちがえた問題）の引きつぎ
   await p.evaluate(() => localStorage.setItem('english-island-v1', JSON.stringify({coins:120, learned:{dog:1}, miss:[JSON.stringify({kind:'talk', i:1})]})));
   await p.reload();
   const mig = await p.evaluate(() => ({t:S.tickets, dog:S.m['w:dog'] && S.m['w:dog'].lv, talk:S.m['t:1'] && S.m['t:1'].wrong, due:dueItems().length}));

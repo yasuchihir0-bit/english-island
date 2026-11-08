@@ -177,6 +177,15 @@ h2{font-size:17px;margin:0;font-weight:800}
 .tile.used{visibility:hidden}
 .slots.bad{animation:wob .4s}
 @keyframes wob{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.model{text-align:center;font-size:30px;font-weight:600;color:var(--sea);margin:0;letter-spacing:.06em}
+.flash{animation:pop .3s}
+.ghostch{font-style:normal;opacity:.22}
+.slots.words{gap:6px}
+.slot.wslot{width:auto;min-width:64px;padding:0 10px;font-size:20px}
+.tile.wtile{width:auto;padding:0 14px;font-size:20px}
+.row2{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center}
+.ch .em{position:relative}
+.mark{position:absolute;right:-18px;bottom:-4px;font-size:22px}
 .mic{align-self:center;width:120px;height:120px;border-radius:50%;background:var(--coral);color:#fff;font-size:50px;box-shadow:0 6px 0 color-mix(in srgb,var(--coral) 60%,var(--ink))}
 .mic.on{animation:pulse 1s infinite}
 @keyframes pulse{50%{box-shadow:0 0 0 14px color-mix(in srgb,var(--coral) 30%,transparent),0 6px 0 color-mix(in srgb,var(--coral) 60%,var(--ink))}}

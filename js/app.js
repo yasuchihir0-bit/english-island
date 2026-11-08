@@ -30,10 +30,19 @@ const TALK = [
   {q:'How do you spell your name?',situ:'あなたの名前は Ken',e:'✏️',a:'K, E, N.',w:['I like Ken.','Nice to meet you.']}
 ];
 const SPELL = ['dog','cat','red','bear','milk','blue','apple','pizza'];
+/* 文を聞いて絵をえらぶ：好き（like）／好きじゃない（not）／好き？と聞く（ask）の聞き分け */
+const PL = {apple:'apples',banana:'bananas',orange:'oranges',strawberry:'strawberries',melon:'melons',dog:'dogs',cat:'cats',rabbit:'rabbits',bear:'bears'};
+const HEAR = [{w:'apple',p:'like'},{w:'milk',p:'not'},{w:'cat',p:'ask'},{w:'soccer',p:'like'},{w:'dog',p:'not'},{w:'strawberry',p:'ask'},{w:'blue',p:'like'},{w:'pizza',p:'not'}];
+const POL = {
+  like:{mark:'⭕', en:o => `I like ${o}.`,       ja:j => `${j}が好き`},
+  not: {mark:'❌', en:o => `I don't like ${o}.`, ja:j => `${j}が好きじゃない`},
+  ask: {mark:'❓', en:o => `Do you like ${o}?`,  ja:j => `${j}は好き？と聞いている`}
+};
+const hearSent = h => POL[h.p].en(PL[h.w] || WORDS[h.w].en);
 
 const STAGES = [
-  {id:'s1',kind:'listen',name:'聞くマス',ic:'🔊',x:28,y:86,desc:'英語を聞いて、合う絵をえらぼう'},
-  {id:'s2',kind:'spell', name:'つづるマス',ic:'✍️',x:70,y:73,desc:'文字をならべて、単語を作ろう'},
+  {id:'s1',kind:'listen',name:'聞くマス',ic:'🔊',x:28,y:86,desc:'英語の単語や文を聞いて、合う絵をえらぼう'},
+  {id:'s2',kind:'spell', name:'つづるマス',ic:'✍️',x:70,y:73,desc:'文字や単語をならべて、英語を作ろう'},
   {id:'s3',kind:'speak', name:'話すマス',ic:'🎤',x:32,y:59,desc:'声に出して言ってみよう'},
   {id:'s4',kind:'talk',  name:'会話マス',ic:'💬',x:72,y:45,desc:'聞かれたことに答えよう'},
   {id:'s5',kind:'review',name:'宝箱マス',ic:'🎁',x:34,y:31,desc:'苦手な問題を集中トレーニング'},
@@ -69,7 +78,7 @@ const LV = ['🥚','🐣','🐥','🐔','👑'];
 const LV_NAME = ['はじめて','聞いてわかる','見てわかる','言える','マスター'];
 const INTERVAL = [0,1,3,7,14];
 const SENTENCES = SPEAK.filter(s => s.en.includes(' '));
-const ITEMS = [...Object.keys(WORDS).map(k => 'w:'+k), ...SENTENCES.map((_,i) => 's:'+i), ...TALK.map((_,i) => 't:'+i)];
+const ITEMS = [...Object.keys(WORDS).map(k => 'w:'+k), ...HEAR.map((_,i) => 'l:'+i), ...SENTENCES.map((_,i) => 's:'+i), ...TALK.map((_,i) => 't:'+i)];
 
 /* ---------- state ---------- */
 const KEY = 'english-island-v1';
@@ -103,6 +112,7 @@ function itemInfo(id){
   const [t,k] = id.split(':');
   if (t === 'w') return WORDS[k];
   if (t === 's') return SENTENCES[k];
+  if (t === 'l'){ const h = HEAR[k], w = WORDS[h.w]; return {en:hearSent(h), ja:POL[h.p].ja(w.ja), e:w.e}; }
   return {en:TALK[k].q, ja:'答え：' + TALK[k].a, e:TALK[k].e};
 }
 function dueItems(){
@@ -116,7 +126,7 @@ function grade(q, ok){
   const t = dayNum(), m = Object.assign({lv:0, due:0, right:0, wrong:0}, S.m[q.id]);
   const before = m.lv, wasDue = m.lv > 0 && m.due <= t;
   let pts = 0, mastered = false;
-  if (q.retry){ if (ok) pts = PTS.neu; }                 // その場のやり直し：段階は変えない
+  if (q.retry || q.hinted){ if (ok) pts = PTS.neu; }     // その場のやり直し・お手本を見た：段階は変えない
   else if (ok){
     m.right++;
     pts = m.wrongDay !== undefined && m.wrongDay < t ? PTS.fixed : wasDue ? PTS.due : PTS.neu;
@@ -292,7 +302,10 @@ function wordChoices(key){
 const Q = {
   listen:  k => ({kind:'listen', id:'w:'+k, key:k, choices:wordChoices(k)}),
   read:    k => ({kind:'read', id:'w:'+k, key:k, choices:wordChoices(k)}),
-  spell:   k => ({kind:'spell', id:'w:'+k, key:k}),
+  spell:   (k, model) => ({kind:'spell', id:'w:'+k, key:k, model}),
+  hear:    i => { const h = HEAR[i], other = pick(Object.keys(WORDS).filter(k => k !== h.w && GROUPS.some(g => g.includes(k) && g.includes(h.w))), 1)[0];
+    return {kind:'hear', id:'l:'+i, h, choices:shuffle([{w:h.w,p:'like'},{w:h.w,p:'not'},{w:h.w,p:'ask'},{w:other,p:h.p}])}; },
+  order:   i => ({kind:'order', id:'s:'+i, it:SENTENCES[i]}),
   sayword: k => ({kind:'speak', id:'w:'+k, it:WORDS[k]}),
   speak:   i => ({kind:'speak', id:'s:'+i, it:SENTENCES[i]}),
   talk:    i => ({kind:'talk', id:'t:'+i, t:TALK[i], choices:shuffle([TALK[i].a, ...TALK[i].w])})
@@ -301,25 +314,28 @@ const Q = {
 function makeQ(id){
   const [t,k] = id.split(':');
   if (t === 't') return Q.talk(+k);
-  if (t === 's') return Q.speak(+k);
+  if (t === 'l') return Q.hear(+k);
   const lv = mOf(id).lv;
-  return lv <= 1 ? Q.listen(k) : lv === 2 ? Q.read(k) : lv === 3 || !SPELL.includes(k) ? Q.sayword(k) : Q.spell(k);
+  if (t === 's') return lv <= 1 ? Q.order(+k) : Q.speak(+k);   // 文：ならべかえ → 言う
+  return lv <= 1 ? Q.listen(k) : lv === 2 ? Q.read(k) : lv === 3 || !SPELL.includes(k) ? Q.sayword(k) : Q.spell(k, false);
 }
 const ids = (t, list) => list.map(k => t + ':' + k);
 const key = id => id.split(':')[1];
 function build(stage){
-  const W = ids('w', Object.keys(WORDS)), SP = ids('w', SPELL), SE = SENTENCES.map((_,i) => 's:'+i), TA = TALK.map((_,i) => 't:'+i);
+  const W = ids('w', Object.keys(WORDS)), SP = ids('w', SPELL), SE = SENTENCES.map((_,i) => 's:'+i), TA = TALK.map((_,i) => 't:'+i), HE = HEAR.map((_,i) => 'l:'+i);
+  const spellQ = id => Q.spell(key(id), mOf(id).lv < 3);   // 覚えはじめはお手本つき
   if (stage.kind === 'daily')  return dueItems().slice(0, REVIEW_MAX).map(makeQ);
-  if (stage.kind === 'listen') return weakFirst(W).slice(0,8).map(id => Q.listen(key(id)));
-  if (stage.kind === 'spell')  return weakFirst(SP).slice(0,6).map(id => Q.spell(key(id)));
+  if (stage.kind === 'listen') return shuffle([...weakFirst(W).slice(0,5).map(id => Q.listen(key(id))), ...weakFirst(HE).slice(0,3).map(id => Q.hear(+key(id)))]);
+  if (stage.kind === 'spell')  return shuffle([...weakFirst(SP).slice(0,4).map(spellQ), ...weakFirst(SE).slice(0,2).map(id => Q.order(+key(id)))]);
   if (stage.kind === 'speak')  return shuffle([...weakFirst(SE).slice(0,3).map(id => Q.speak(+key(id))), ...weakFirst(W).slice(0,2).map(id => Q.sayword(key(id)))]);
   if (stage.kind === 'talk')   return weakFirst(TA).slice(0,6).map(id => Q.talk(+key(id)));
   if (stage.kind === 'review'){  // 宝箱マス：苦手なもの（まちがえた回数が多い・段階が低い）を集中
     const weak = shuffle(ITEMS).sort((a,b) => (mOf(b).wrong - mOf(b).right/3) - (mOf(a).wrong - mOf(a).right/3) || mOf(a).lv - mOf(b).lv);
     return weak.slice(0,8).map(makeQ);
   }
-  return shuffle([...weakFirst(W).slice(0,3).map(id => Q.listen(key(id))), ...weakFirst(SP).slice(0,2).map(id => Q.spell(key(id))),
-    ...weakFirst(SE).slice(0,2).map(id => Q.speak(+key(id))), ...weakFirst(TA).slice(0,3).map(id => Q.talk(+key(id)))]);
+  return shuffle([...weakFirst(W).slice(0,2).map(id => Q.listen(key(id))), ...weakFirst(HE).slice(0,1).map(id => Q.hear(+key(id))),
+    ...weakFirst(SP).slice(0,1).map(id => Q.spell(key(id), false)), ...weakFirst(SE).slice(0,1).map(id => Q.order(+key(id))),
+    ...weakFirst(SE).slice(1,3).map(id => Q.speak(+key(id))), ...weakFirst(TA).slice(0,3).map(id => Q.talk(+key(id)))]);
 }
 
 /* ---------- quiz run ---------- */
@@ -361,31 +377,57 @@ function showQ(){
       lockChoices(); answer(ok, `${w.e} <span class="en">${w.en}</span> ＝ ${w.ja}`, w.en);
     });
   }
-  else if (q.kind === 'spell'){
-    const w = WORDS[q.key], letters = w.en.split('');
-    const decoys = pick('abcdefghijklmnoprstuwy'.split('').filter(c => !letters.includes(c)), 2);
-    const tiles = shuffle(letters.concat(decoys));
-    const filled = [];
-    shell(`<span class="kind">✍️ つづってみよう</span><div class="hero">${w.e}</div><p class="prompt" style="text-align:center">「${w.ja}」を英語で</p>
-      ${audioRow()}<div class="slots" id="slots"></div><div class="tiles" id="tiles"></div>
-      <button class="ghost" id="back">⌫ 1文字もどす</button>`);
-    wireAudio(w.en);
+  else if (q.kind === 'spell' || q.kind === 'order'){
+    // つづり（文字をならべる）とならべかえ（単語をならべる）は同じしくみ
+    const isSpell = q.kind === 'spell', it = isSpell ? WORDS[q.key] : q.it;
+    const parts = isSpell ? it.en.split('') : it.en.split(' ');
+    const extra = isSpell ? pick('abcdefghijklmnoprstuwy'.split('').filter(c => !parts.includes(c)), 2) : [];
+    const tiles = shuffle(parts.concat(extra)), filled = [];
+    const model = isSpell && q.model;
+    shell(`<span class="kind">${isSpell ? '✍️ つづってみよう' : '🧩 ならべかえよう'}</span><div class="hero">${it.e}</div>
+      <p class="prompt" style="text-align:center">${isSpell ? `「${it.ja}」を英語で` : esc(it.ja)}</p>
+      ${model ? `<p class="model en" aria-label="お手本">${esc(it.en)}</p>` : '<div id="hintbox"></div>'}
+      ${audioRow()}<div class="slots ${isSpell ? '' : 'words'}" id="slots"></div><div class="tiles" id="tiles"></div>
+      <div class="row2"><button class="ghost" id="back">⌫ 1つもどす</button>${isSpell && !model ? '<button class="ghost" id="hint">👀 お手本を見る</button>' : ''}</div>`);
+    wireAudio(it.en); if (!isSpell) say(it.en);
+    if ($('#hint')) $('#hint').onclick = () => {
+      q.hinted = true; $('#hint').disabled = true;
+      $('#hintbox').innerHTML = `<p class="model en flash">${esc(it.en)}</p>`;
+      setTimeout(() => { if ($('#hintbox')) $('#hintbox').innerHTML = ''; }, 2500);
+    };
+    const cls = isSpell ? 'tile' : 'tile wtile';
     const paint = () => {
-      $('#slots').innerHTML = letters.map((_,i) => `<span class="slot ${filled[i]!==undefined?'f':''}">${filled[i]!==undefined?tiles[filled[i]]:''}</span>`).join('');
-      $('#tiles').innerHTML = tiles.map((c,i) => `<button class="tile ${filled.includes(i)?'used':''}" data-i="${i}">${c}</button>`).join('');
-      document.querySelectorAll('.tile').forEach(t => t.onclick = () => {
-        if (filled.length >= letters.length) return;
+      $('#slots').innerHTML = parts.map((p,i) => `<span class="slot ${isSpell ? '' : 'wslot'} ${filled[i]!==undefined?'f':''}">${filled[i]!==undefined ? esc(tiles[filled[i]]) : model ? `<i class="ghostch">${esc(p)}</i>` : ''}</span>`).join('');
+      $('#tiles').innerHTML = tiles.map((c,i) => `<button class="${cls} ${filled.includes(i)?'used':''}" data-i="${i}">${esc(c)}</button>`).join('');
+      document.querySelectorAll('#tiles .tile').forEach(t => t.onclick = () => {
+        if (filled.length >= parts.length) return;
         filled.push(+t.dataset.i); paint();
-        if (filled.length === letters.length){
-          const got = filled.map(i => tiles[i]).join(''), ok = got === w.en;
+        if (filled.length === parts.length){
+          const got = filled.map(i => tiles[i]).join(isSpell ? '' : ' '), ok = got === it.en;
           if (!ok) $('#slots').classList.add('bad');
-          $('#back').hidden = true; document.querySelectorAll('.tile').forEach(x => x.disabled = true);
-          answer(ok, `${w.e} <span class="en">${w.en}</span> ＝ ${w.ja}`, w.en);
+          $('#back').hidden = true; if ($('#hint')) $('#hint').hidden = true;
+          document.querySelectorAll('#tiles .tile').forEach(x => x.disabled = true);
+          answer(ok, `${it.e} <span class="en">${esc(it.en)}</span> ＝ ${esc(it.ja)}`, it.en);
         }
       });
     };
     $('#back').onclick = () => { filled.pop(); paint(); };
     paint();
+  }
+  else if (q.kind === 'hear'){
+    const h = q.h, sent = hearSent(h);
+    const label = c => `<span class="em">${WORDS[c.w].e}<b class="mark">${POL[c.p].mark}</b></span><span class="ja">${POL[c.p].ja(WORDS[c.w].ja)}</span>`;
+    shell(`<span class="kind">🔊 文を聞いてえらぼう</span><p class="prompt">聞こえた文に合うのはどれ？</p>${audioRow()}
+      <p class="sub">⭕ 好き　❌ 好きじゃない　❓ 好き？と聞いている</p>
+      <div class="choices">${q.choices.map((c,i) => `<button class="ch" data-i="${i}">${label(c)}</button>`).join('')}</div>`);
+    wireAudio(sent); say(sent);
+    const isRight = c => c.w === h.w && c.p === h.p;
+    document.querySelectorAll('.ch').forEach(b => b.onclick = () => {
+      const ok = isRight(q.choices[+b.dataset.i]);
+      b.classList.add(ok ? 'good' : 'bad');
+      if (!ok) document.querySelectorAll('.ch').forEach(x => { if (isRight(q.choices[+x.dataset.i])) x.classList.add('good'); });
+      lockChoices(); answer(ok, `<span class="en">${esc(sent)}</span>（${POL[h.p].ja(WORDS[h.w].ja)}）`, sent);
+    });
   }
   else if (q.kind === 'speak'){
     const it = q.it; let tries = 0;
