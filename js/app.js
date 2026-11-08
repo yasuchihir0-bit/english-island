@@ -338,12 +338,12 @@ function showQ(){
     shell(`<span class="kind">💬 答えよう</span>
       <div class="scene"><div class="bubble en">${t.e} ${esc(t.q)}</div><div class="situ">場面：${t.situ}</div></div>
       ${audioRow()}
-      <div class="choices list">${t.choices.map((c,i) => `<button class="ch en" data-i="${i}">${esc(c)}</button>`).join('')}</div>`);
+      <div class="choices list">${q.choices.map((c,i) => `<button class="ch en" data-i="${i}">${esc(c)}</button>`).join('')}</div>`);
     wireAudio(t.q); say(t.q);
     document.querySelectorAll('.ch').forEach(b => b.onclick = () => {
-      const ok = t.choices[+b.dataset.i] === t.a;
+      const ok = q.choices[+b.dataset.i] === t.a;
       b.classList.add(ok ? 'good' : 'bad');
-      if (!ok) document.querySelectorAll('.ch').forEach(x => { if (t.choices[+x.dataset.i] === t.a) x.classList.add('good'); });
+      if (!ok) document.querySelectorAll('.ch').forEach(x => { if (q.choices[+x.dataset.i] === t.a) x.classList.add('good'); });
       lockChoices(); answer(ok, `<span class="en">${esc(t.a)}</span>`, t.a);
     });
   }

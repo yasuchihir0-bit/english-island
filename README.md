@@ -75,4 +75,5 @@ css/style.css         見た目
 js/app.js             問題データ・ゲームの動き
 manifest.webmanifest  ホーム画面に追加したときの設定
 icon.svg              アイコン
+tests/play.js         全部のマスを自動でといて、エラーがないか確かめるテスト（node tests/play.js）
 ```
