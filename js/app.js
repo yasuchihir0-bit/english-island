@@ -36,7 +36,7 @@ const STAGES = [
   {id:'s2',kind:'spell', name:'つづるマス',ic:'✍️',x:70,y:73,desc:'文字をならべて、単語を作ろう'},
   {id:'s3',kind:'speak', name:'話すマス',ic:'🎤',x:32,y:59,desc:'声に出して言ってみよう'},
   {id:'s4',kind:'talk',  name:'会話マス',ic:'💬',x:72,y:45,desc:'聞かれたことに答えよう'},
-  {id:'s5',kind:'review',name:'宝箱マス',ic:'🎁',x:34,y:31,desc:'まちがえた問題をもう一度ちょうせん'},
+  {id:'s5',kind:'review',name:'宝箱マス',ic:'🎁',x:34,y:31,desc:'苦手な問題を集中トレーニング'},
   {id:'boss',kind:'boss',name:'門番ガニ',ic:'🦀',x:60,y:13,desc:'まとめのバトル。ハートは3つ'}
 ];
 const NEXT_ISLES = [
@@ -58,27 +58,85 @@ const PALS = [
   {id:'dragon',en:'dragon',ja:'ドラゴン',e:'🐉',r:'SSR'},{id:'dinosaur',en:'dinosaur',ja:'きょうりゅう',e:'🦖',r:'SSR'}
 ];
 const ODDS = [['N',60],['R',28],['SR',10],['SSR',2]];
-/* ガチャ券：問題をといた時間 TICKET_MIN 分ごとに1枚。勉強として数えるのは1日 DAILY_MIN 分まで */
-const TICKET_MIN = 5, DAILY_MIN = 60, SHARDS_FOR_FREE = 5;
-const Q_MAX_SEC = 40; // 1問で数える時間の上限（放っておいても増えないように）
+/* ガチャ券：がんばりポイント POINTS_PER_TICKET で1枚。勉強は1日 DAILY_MIN 分まで */
+const POINTS_PER_TICKET = 10, DAILY_MIN = 60, SHARDS_FOR_FREE = 5;
+const Q_MAX_SEC = 40;   // 1問で勉強時間として数える上限（放っておいても増えないように）
+const REVIEW_MAX = 12;  // 「今日の復習」の最大問題数
+const PTS = {neu:1, due:2, fixed:3, master:5, review:5}; // 新しい問題に正解／復習で正解／前にまちがえた問題に正解／マスター／今日の復習ぜんぶ
+
+/* 覚えぐあい：0 はじめて → 4 マスター。正解すると1段階上がり、次に出すまでの日数がのびる */
+const LV = ['🥚','🐣','🐥','🐔','👑'];
+const LV_NAME = ['はじめて','聞いてわかる','見てわかる','言える','マスター'];
+const INTERVAL = [0,1,3,7,14];
+const SENTENCES = SPEAK.filter(s => s.en.includes(' '));
+const ITEMS = [...Object.keys(WORDS).map(k => 'w:'+k), ...SENTENCES.map((_,i) => 's:'+i), ...TALK.map((_,i) => 't:'+i)];
 
 /* ---------- state ---------- */
 const KEY = 'english-island-v1';
 const today = () => { const d = new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
-function fresh(){ return {tickets:1,stars:{},owned:{},shards:0,study:{d:'',sec:0,got:0},streak:{last:'',n:0},miss:[],learned:{},partner:null}; }
+function fresh(){ return {tickets:1,pts:0,m:{},rev:{d:''},log:{},stars:{},owned:{},shards:0,study:{d:'',sec:0},streak:{last:'',n:0},partner:null}; }
 let S = fresh();
 try { const raw = localStorage.getItem(KEY); if (raw){ const old = JSON.parse(raw);
   if (old.tickets === undefined && typeof old.coins === 'number') old.tickets = Math.max(1, Math.floor(old.coins / 50));
-  delete old.coins; delete old.pulls; S = Object.assign(fresh(), old); } } catch(e) {}
+  delete old.coins; delete old.pulls; S = Object.assign(fresh(), old); migrate(old); } } catch(e) {}
 function studyToday(){ if (S.study.d !== today()) S.study = {d:today(), sec:0, got:0}; return S.study; }
 const doneToday = () => studyToday().sec >= DAILY_MIN * 60;
 const fmtTime = sec => { sec = Math.floor(sec); const m = Math.floor(sec/60), s = sec % 60; return m ? `${m}分${s ? s + '秒' : ''}` : `${s}秒`; };
 function addStudy(sec){
   const st = studyToday(), before = st.sec;
   st.sec = Math.min(before + Math.min(sec, Q_MAX_SEC), DAILY_MIN * 60);
-  const got = Math.floor(st.sec / (TICKET_MIN * 60)), n = got - st.got;
-  if (n > 0){ S.tickets += n; st.got = got; toast('🎫 ガチャ券ゲット！'); }
-  return {sec: st.sec - before, tickets: Math.max(n,0)};
+  logToday().sec = st.sec;
+  return st.sec - before;
+}
+function logToday(){ const d = today(); return S.log[d] || (S.log[d] = {sec:0, ok:0, ng:0}); }
+function addPoints(n){
+  S.pts += n; let got = 0;
+  while (S.pts >= POINTS_PER_TICKET){ S.pts -= POINTS_PER_TICKET; S.tickets++; got++; }
+  if (got) toast('🎫 ガチャ券ゲット！');
+  return got;
+}
+
+/* ---------- 覚えぐあい（間をあけた復習） ---------- */
+function dayNum(d = new Date()){ return Math.floor((d.getTime() - d.getTimezoneOffset()*60000) / 86400000); }
+const mOf = id => S.m[id] || {lv:0, due:0, right:0, wrong:0};
+function itemInfo(id){
+  const [t,k] = id.split(':');
+  if (t === 'w') return WORDS[k];
+  if (t === 's') return SENTENCES[k];
+  return {en:TALK[k].q, ja:'答え：' + TALK[k].a, e:TALK[k].e};
+}
+function dueItems(){
+  const t = dayNum();
+  return ITEMS.filter(id => S.m[id] && S.m[id].lv > 0 && S.m[id].due <= t)
+    .sort((a,b) => (S.m[a].due - S.m[b].due) || (S.m[a].lv - S.m[b].lv));
+}
+const weakFirst = ids => shuffle(ids).sort((a,b) => mOf(a).lv - mOf(b).lv);
+/* 正解・不正解を覚えぐあいに反映して、もらえるポイントを返す */
+function grade(q, ok){
+  const t = dayNum(), m = Object.assign({lv:0, due:0, right:0, wrong:0}, S.m[q.id]);
+  const before = m.lv, wasDue = m.lv > 0 && m.due <= t;
+  let pts = 0, mastered = false;
+  if (q.retry){ if (ok) pts = PTS.neu; }                 // その場のやり直し：段階は変えない
+  else if (ok){
+    m.right++;
+    pts = m.wrongDay !== undefined && m.wrongDay < t ? PTS.fixed : wasDue ? PTS.due : PTS.neu;
+    delete m.wrongDay;
+    if (m.upDay !== t){ m.lv = Math.min(4, m.lv + 1); m.upDay = t; }   // 1日に上がるのは1段階まで
+    m.due = t + INTERVAL[m.lv];
+    if (m.lv === 4 && !m.mastered){ m.mastered = true; mastered = true; pts += PTS.master; }
+  } else {
+    m.wrong++; m.lv = Math.max(1, m.lv - 1); m.due = t + 1; m.wrongDay = t;
+  }
+  S.m[q.id] = m;
+  return {pts, before, after:m.lv, mastered};
+}
+function migrate(old){
+  const t = dayNum();
+  for (const k of Object.keys(old.learned || {})) if (WORDS[k] && !S.m['w:'+k]) S.m['w:'+k] = {lv:1, due:t, right:1, wrong:0};
+  for (const raw of old.miss || []){ try { const x = JSON.parse(raw);
+    const id = x.kind === 'talk' ? 't:'+x.i : x.kind === 'speak' ? null : 'w:'+x.key;
+    if (id && ITEMS.includes(id)) S.m[id] = Object.assign({lv:1, due:t, right:0, wrong:1}, S.m[id], {wrongDay:t-1}); } catch(e) {} }
+  delete S.learned; delete S.miss; if (S.study) delete S.study.got;
 }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} paintBar(); }
 
@@ -165,15 +223,28 @@ function terrainSVG(){
 }
 
 function studyCard(){
-  const st = studyToday(), max = DAILY_MIN * 60, per = TICKET_MIN * 60, cells = DAILY_MIN / TICKET_MIN;
-  const left = per - (st.sec % per), done = st.sec >= max;
-  return `<div class="study" aria-label="今日の勉強時間">
-    <div class="study-top"><b>⏱️ 今日の勉強 <span class="num">${Math.floor(st.sec/60)}</span>分</b><span class="sub">/ ${DAILY_MIN}分</span>
-      <span class="study-next">${done ? '🎉 今日はここまで！' : `🎫 まで あと ${fmtTime(left)}`}</span></div>
-    <div class="cells" style="grid-template-columns:repeat(${cells},1fr)">${Array.from({length:cells}, (_,i) => { const f = Math.max(0, Math.min(1, (st.sec - i*per) / per));
-      return `<span class="cell-t ${f>=1?'full':''}"><i style="width:${f*100}%"></i>${f>=1?'🎫':''}</span>`; }).join('')}</div>
-    <p class="sub">${done ? 'よくがんばったね！ ガチャ券でなかまを集めよう。また明日ね。' : `問題をといた時間 ${TICKET_MIN}分ごとに ガチャ券が1枚もらえるよ。`}</p>
+  const st = studyToday(), done = st.sec >= DAILY_MIN * 60;
+  return `<div class="study" aria-label="ガチャ券と今日の勉強時間">
+    <div class="study-top"><b>🎫 つぎのガチャ券まで あと <span class="num">${POINTS_PER_TICKET - S.pts}</span>pt</b>
+      <span class="study-next">⏱️ 今日 ${Math.floor(st.sec/60)}分 / ${DAILY_MIN}分</span></div>
+    <div class="cells" style="grid-template-columns:repeat(${POINTS_PER_TICKET},1fr)">${Array.from({length:POINTS_PER_TICKET}, (_,i) =>
+      `<span class="cell-t ${i < S.pts ? 'full' : ''}">${i < S.pts ? '⭐' : ''}</span>`).join('')}</div>
+    <p class="sub">${done ? `今日の勉強は${DAILY_MIN}分でおしまい。よくがんばったね！ また明日ね。`
+      : `正解でポイント（復習は2pt、前にまちがえた問題は3pt）。${POINTS_PER_TICKET}ptでガチャ券1枚。`}</p>
   </div>`;
+}
+const DAILY_STAGE = {id:'daily', kind:'daily', name:'今日の復習', ic:'🔁'};
+function reviewCard(){
+  const due = dueItems(), done = S.rev.d === today();
+  if (!due.length) return `<div class="review ${done ? 'done' : 'none'}"><b>${done ? '✅ 今日の復習はおわり！' : '🔁 今日の復習はないよ'}</b>
+    <span class="sub">${done ? 'つぎはマップを進もう。' : '新しいマスに進もう。'}</span></div>`;
+  const n = Math.min(due.length, REVIEW_MAX);
+  if (done) return `<div class="review done"><b>✅ 今日の復習はおわり！</b>
+    <span class="sub">まだ復習できる問題が ${due.length}問 あるよ。やりたいときだけでOK（復習の正解は2pt）。</span>
+    <button class="ghost" id="rev">もう少し復習する（${n}問）</button></div>`;
+  return `<div class="review"><b>🔁 今日の復習 ${n}問</b>
+    <span class="sub">わすれかけた問題だけが出るよ。先に復習すると、よく覚えられるよ。ぜんぶ終わると +${PTS.review}pt</span>
+    <button class="big" id="rev">はじめる</button></div>`;
 }
 const unlocked = i => i === 0 || S.stars[STAGES[i-1].id] > 0;
 function renderMap(){
@@ -183,6 +254,7 @@ function renderMap(){
   $('#view').innerHTML = `
     <div class="areahead"><div><h2>🏘️ はじまりの村</h2><p class="sub">5年｜あいさつ・好きなもの</p></div>
       <span class="tag on">${Object.keys(S.stars).length}/${STAGES.length} クリア</span></div>
+    ${reviewCard()}
     ${studyCard()}
     <div class="map" role="group" aria-label="はじまりの村のマップ">
       ${terrainSVG()}
@@ -204,6 +276,10 @@ function renderMap(){
     if (doneToday()) return toast(`今日の勉強は${DAILY_MIN}分でおしまい。また明日ね！`);
     startStage(STAGES[i]);
   });
+  if ($('#rev')) $('#rev').onclick = () => {
+    if (doneToday()) return toast(`今日の勉強は${DAILY_MIN}分でおしまい。また明日ね！`);
+    startStage(DAILY_STAGE);
+  };
 }
 
 /* ---------- question building ---------- */
@@ -214,45 +290,54 @@ function wordChoices(key){
   return shuffle([key, ...pick(pool,3)]);
 }
 const Q = {
-  listen: k => ({kind:'listen', key:k, choices:wordChoices(k)}),
-  spell:  k => ({kind:'spell', key:k}),
-  speak:  it => ({kind:'speak', it}),
-  talk:   t => ({kind:'talk', t, choices:shuffle([t.a, ...t.w])})
+  listen:  k => ({kind:'listen', id:'w:'+k, key:k, choices:wordChoices(k)}),
+  read:    k => ({kind:'read', id:'w:'+k, key:k, choices:wordChoices(k)}),
+  spell:   k => ({kind:'spell', id:'w:'+k, key:k}),
+  sayword: k => ({kind:'speak', id:'w:'+k, it:WORDS[k]}),
+  speak:   i => ({kind:'speak', id:'s:'+i, it:SENTENCES[i]}),
+  talk:    i => ({kind:'talk', id:'t:'+i, t:TALK[i], choices:shuffle([TALK[i].a, ...TALK[i].w])})
 };
-function build(stage){
-  const all = Object.keys(WORDS);
-  if (stage.kind === 'listen') return pick(all,8).map(Q.listen);
-  if (stage.kind === 'spell')  return pick(SPELL,6).map(Q.spell);
-  if (stage.kind === 'speak')  return pick(SPEAK,5).map(Q.speak);
-  if (stage.kind === 'talk')   return pick(TALK,6).map(Q.talk);
-  if (stage.kind === 'review'){
-    const fromMiss = S.miss.slice(-8).map(m => JSON.parse(m)).map(m => m.kind === 'talk' ? Q.talk(TALK[m.i]) : m.kind === 'speak' ? Q.speak(SPEAK[m.i]) : Q[m.kind](m.key));
-    const extra = pick(all, Math.max(0, 6 - fromMiss.length)).map(k => Math.random() < .5 ? Q.listen(k) : Q.spell(k));
-    return shuffle(fromMiss.concat(extra)).slice(0,8);
-  }
-  return shuffle([...pick(all,3).map(Q.listen), ...pick(SPELL,2).map(Q.spell), ...pick(SPEAK,2).map(Q.speak), ...pick(TALK,3).map(Q.talk)]);
+/* 覚えぐあいに合わせて問題の形を決める：聞く → 見る → 言う → つづる */
+function makeQ(id){
+  const [t,k] = id.split(':');
+  if (t === 't') return Q.talk(+k);
+  if (t === 's') return Q.speak(+k);
+  const lv = mOf(id).lv;
+  return lv <= 1 ? Q.listen(k) : lv === 2 ? Q.read(k) : lv === 3 || !SPELL.includes(k) ? Q.sayword(k) : Q.spell(k);
 }
-function missKey(q){
-  if (q.kind === 'talk') return JSON.stringify({kind:'talk', i:TALK.indexOf(q.t)});
-  if (q.kind === 'speak') return JSON.stringify({kind:'speak', i:SPEAK.indexOf(q.it)});
-  return JSON.stringify({kind:q.kind, key:q.key});
+const ids = (t, list) => list.map(k => t + ':' + k);
+const key = id => id.split(':')[1];
+function build(stage){
+  const W = ids('w', Object.keys(WORDS)), SP = ids('w', SPELL), SE = SENTENCES.map((_,i) => 's:'+i), TA = TALK.map((_,i) => 't:'+i);
+  if (stage.kind === 'daily')  return dueItems().slice(0, REVIEW_MAX).map(makeQ);
+  if (stage.kind === 'listen') return weakFirst(W).slice(0,8).map(id => Q.listen(key(id)));
+  if (stage.kind === 'spell')  return weakFirst(SP).slice(0,6).map(id => Q.spell(key(id)));
+  if (stage.kind === 'speak')  return shuffle([...weakFirst(SE).slice(0,3).map(id => Q.speak(+key(id))), ...weakFirst(W).slice(0,2).map(id => Q.sayword(key(id)))]);
+  if (stage.kind === 'talk')   return weakFirst(TA).slice(0,6).map(id => Q.talk(+key(id)));
+  if (stage.kind === 'review'){  // 宝箱マス：苦手なもの（まちがえた回数が多い・段階が低い）を集中
+    const weak = shuffle(ITEMS).sort((a,b) => (mOf(b).wrong - mOf(b).right/3) - (mOf(a).wrong - mOf(a).right/3) || mOf(a).lv - mOf(b).lv);
+    return weak.slice(0,8).map(makeQ);
+  }
+  return shuffle([...weakFirst(W).slice(0,3).map(id => Q.listen(key(id))), ...weakFirst(SP).slice(0,2).map(id => Q.spell(key(id))),
+    ...weakFirst(SE).slice(0,2).map(id => Q.speak(+key(id))), ...weakFirst(TA).slice(0,3).map(id => Q.talk(+key(id)))]);
 }
 
 /* ---------- quiz run ---------- */
 let run = null;
 function startStage(stage){
-  run = {stage, qs:build(stage), i:0, right:0, hearts:stage.kind==='boss'?3:null, sec:0, tickets:0, t0:0};
+  const qs = build(stage);
+  run = {stage, qs, base:qs.length, i:0, right:0, hearts:stage.kind==='boss'?3:null, sec:0, pts:0, tickets:0, ups:0, t0:0};
   $('#quiz').hidden = false; document.body.style.overflow = 'hidden';
   showQ();
 }
 function closeQuiz(){ if ('speechSynthesis' in window) speechSynthesis.cancel(); $('#quiz').hidden = true; document.body.style.overflow = ''; run = null; render(); }
 function shell(inner){
-  const pct = Math.round(run.i / run.qs.length * 100);
+  const pct = Math.round(run.i / run.qs.length * 100), q = run.qs[run.i];
   $('#quiz').innerHTML = `
     <div class="qtop"><button class="x" id="qx" aria-label="やめる">✕</button>
       <div class="prog" aria-label="すすみぐあい"><i style="width:${pct}%"></i></div>
-      ${run.hearts !== null ? `<span class="hearts" aria-label="ハート ${run.hearts}">${'❤️'.repeat(run.hearts)}${'🤍'.repeat(3-run.hearts)}</span>` : `<span class="pill">${run.i+1}/${run.qs.length}</span>`}</div>
-    <div class="qbody">${inner}</div><div class="foot" id="foot" hidden></div>`;
+      ${run.hearts !== null ? `<span class="hearts" aria-label="ハート ${run.hearts}">${'❤️'.repeat(run.hearts)}${'🤍'.repeat(3-run.hearts)}</span>` : `<span class="pill">${Math.min(run.i+1, run.qs.length)}/${run.qs.length}</span>`}</div>
+    <div class="qbody">${q && q.retry ? '<span class="retry">🔁 さっきまちがえた問題。もう一回！</span>' : ''}${inner}</div><div class="foot" id="foot" hidden></div>`;
   $('#qx').onclick = closeQuiz;
 }
 function audioRow(text){
@@ -262,13 +347,15 @@ function wireAudio(text){ $('#play').onclick = () => say(text); $('#slow').oncli
 
 function showQ(){
   const q = run.qs[run.i]; run.t0 = Date.now();
-  if (q.kind === 'listen'){
-    const w = WORDS[q.key];
-    shell(`<span class="kind">🔊 聞いてえらぼう</span><p class="prompt">聞こえた英語はどれ？</p>${audioRow()}
+  if (q.kind === 'listen' || q.kind === 'read'){
+    const w = WORDS[q.key], listen = q.kind === 'listen';
+    shell((listen ? `<span class="kind">🔊 聞いてえらぼう</span><p class="prompt">聞こえた英語はどれ？</p>${audioRow()}`
+      : `<span class="kind">👀 読んでえらぼう</span><p class="prompt">この英語はどれ？</p><p class="target en big-en">${w.en}</p>`) + `
       <div class="choices">${q.choices.map(k => `<button class="ch" data-k="${k}"><span class="em">${WORDS[k].e}</span><span class="ja">${WORDS[k].ja}</span></button>`).join('')}</div>`);
-    wireAudio(w.en); say(w.en);
+    if (listen){ wireAudio(w.en); say(w.en); }
     document.querySelectorAll('.ch').forEach(b => b.onclick = () => {
       const ok = b.dataset.k === q.key;
+      if (!listen) say(w.en);
       b.classList.add(ok ? 'good' : 'bad');
       if (!ok) document.querySelector(`.ch[data-k="${q.key}"]`).classList.add('good');
       lockChoices(); answer(ok, `${w.e} <span class="en">${w.en}</span> ＝ ${w.ja}`, w.en);
@@ -351,14 +438,20 @@ function showQ(){
 function lockChoices(){ document.querySelectorAll('.ch').forEach(x => x.disabled = true); }
 
 function answer(ok, label, speakText){
-  const q = run.qs[run.i], mk = missKey(q);
-  const gain = addStudy((Date.now() - run.t0) / 1000); run.sec += gain.sec; run.tickets += gain.tickets;
-  if (ok){ run.right++; if (q.key) S.learned[q.key] = 1; S.miss = S.miss.filter(m => m !== mk); }
-  else { if (!S.miss.includes(mk)) S.miss.push(mk); if (run.hearts !== null) run.hearts--; }
+  const q = run.qs[run.i];
+  run.sec += addStudy((Date.now() - run.t0) / 1000);
+  const g = grade(q, ok); run.pts += g.pts; run.tickets += addPoints(g.pts);
+  if (g.after > g.before) run.ups++;
+  const lg = logToday(); ok ? lg.ok++ : lg.ng++;
+  if (!q.retry){
+    if (ok) run.right++;
+    else if (run.hearts !== null) run.hearts--;
+    else { const r = Object.assign({}, q, {retry:true}); if (r.choices) r.choices = shuffle(r.choices); run.qs.push(r); }  // まちがえた問題は最後にもう一回
+  }
   save();
   const f = $('#foot'); f.hidden = false; f.className = 'foot ' + (ok ? 'ok' : 'ng');
   const praise = ['すごい！','せいかい！','いいね！','ばっちり！'][Math.floor(Math.random()*4)];
-  f.innerHTML = `<div><div class="fmsg">${ok ? '⭕ ' + praise : '❌ おしい！'}<small>${ok ? '' : '正かいは '}${label}</small></div>
+  f.innerHTML = `<div><div class="fmsg">${ok ? '⭕ ' + praise + (g.pts ? ` <span class="pt">+${g.pts}pt</span>` : '') : '❌ おしい！'}${g.mastered ? ' 👑 マスター！' : g.after > g.before ? ` <span class="lvup">${LV[g.before]}→${LV[g.after]}</span>` : ''}<small>${ok ? '' : '正かいは '}${label}</small></div>
     <button class="big ${ok?'alt':''}" id="go">つぎへ</button></div>`;
   if (speakText && !ok) setTimeout(() => say(speakText), 300);
   $('#go').onclick = () => {
@@ -370,10 +463,12 @@ function answer(ok, label, speakText){
 }
 
 function finish(knocked){
-  const s = run.stage, rate = run.right / run.qs.length;
+  const s = run.stage, rate = run.right / run.base;
   const stars = knocked ? 0 : rate === 1 ? 3 : rate >= .8 ? 2 : rate >= .6 ? 1 : 0;
   const first = stars > 0 && !S.stars[s.id];
-  if (stars > 0) S.stars[s.id] = Math.max(S.stars[s.id] || 0, stars);
+  if (stars > 0 && s.kind !== 'daily') S.stars[s.id] = Math.max(S.stars[s.id] || 0, stars);
+  let bonus = 0;
+  if (s.kind === 'daily' && S.rev.d !== today()){ S.rev = {d:today()}; bonus = PTS.review; run.pts += bonus; run.tickets += addPoints(bonus); }
   const d = today();
   if (S.streak.last !== d){
     const y = new Date(); y.setDate(y.getDate()-1);
@@ -381,16 +476,18 @@ function finish(knocked){
     S.streak.n = S.streak.last === yd ? S.streak.n + 1 : 1; S.streak.last = d;
   }
   save();
-  const msg = knocked ? 'ハートがなくなった…。門番ガニにもう一回ちょうせんしよう！'
+  const msg = s.kind === 'daily' ? (bonus ? `今日の復習ぜんぶおわり！ +${bonus}pt` : '復習おわり！') + ' つぎはマップを進もう。'
+    : knocked ? 'ハートがなくなった…。門番ガニにもう一回ちょうせんしよう！'
     : stars === 0 ? 'あと少し！6わり正かいでクリアだよ。'
     : s.kind === 'boss' ? 'はじまりの村をクリア！ つぎの島は じゅんび中だよ。' : first ? 'つぎのマスへ進めるようになったよ！' : 'クリア！';
   $('#quiz').innerHTML = `<div class="qbody"><div class="result">
     <div class="stars" aria-label="星 ${stars}">${[0,1,2].map(i => i < stars ? '★' : '<span class="off">★</span>').join('')}</div>
-    <h2>${s.ic} ${s.name}</h2><p>${run.right} / ${run.qs.length} 問 正かい</p><p>${msg}</p>
-    <span class="pill">⏱️ 勉強 +${fmtTime(run.sec)}${run.tickets ? `　🎫 +${run.tickets}枚` : ''}</span>
+    <h2>${s.ic} ${s.name}</h2><p>${run.right} / ${run.base} 問 正かい</p><p>${msg}</p>
+    <span class="pill">⭐ +${run.pts}pt${run.tickets ? `　🎫 +${run.tickets}枚` : ''}${run.ups ? `　🆙 ${run.ups}こ` : ''}</span>
+    <p class="sub">⏱️ 勉強 +${fmtTime(run.sec)}</p>
     ${studyCard()}
     <button class="big" id="toGacha">🎰 ガチャへ</button>
-    ${doneToday() ? '' : '<button class="big alt" id="retry">もう一回</button>'}
+    ${doneToday() || s.kind === 'daily' ? '' : '<button class="big alt" id="retry">もう一回</button>'}
     <button class="ghost" id="toMap">マップにもどる</button></div></div>`;
   if ($('#retry')) $('#retry').onclick = () => startStage(s);
   $('#toMap').onclick = closeQuiz;
@@ -400,7 +497,7 @@ function finish(knocked){
 /* ---------- gacha ---------- */
 function renderGacha(last){
   const free = S.shards >= SHARDS_FOR_FREE, can = free || S.tickets > 0;
-  const st = studyToday(), canEarn = DAILY_MIN / TICKET_MIN - st.got;
+
   $('#view').innerHTML = `
     <div class="areahead"><h2>🎰 なかまガチャ</h2><span class="tag on">🎫 ${S.tickets}枚</span></div>
     <div class="machine"><span class="shell" aria-hidden="true">🐚</span>
@@ -411,11 +508,11 @@ function renderGacha(last){
       : `<div class="globe" id="globe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>`}
       <button class="big" id="pull" ${can ? '' : 'disabled'}>${free ? 'かけら 5こで むりょうで引く' : '🎫 ガチャ券1枚で引く'}</button>
       <div class="meter"><span>🎫 ガチャ券 ${S.tickets}枚</span><span>💎 かけら ${S.shards}/${SHARDS_FOR_FREE}</span></div>
-      ${!can ? `<p class="note">${canEarn > 0 ? `ガチャ券がないよ。マップで勉強すると ${TICKET_MIN}分ごとに1枚もらえるよ（今日はあと${canEarn}枚）。` : '今日のガチャ券はもうもらえないよ。また明日勉強しよう！'}</p>` : ''}
+      ${!can ? `<p class="note">${doneToday() ? '今日の勉強はおしまい。また明日勉強してガチャ券を集めよう！' : `ガチャ券がないよ。問題に正解してポイントをためよう（あと${POINTS_PER_TICKET - S.pts}ptで1枚）。`}</p>` : ''}
     </div>
     <h2>出るかくりつ</h2>
     <table class="odds"><tbody>${ODDS.map(([r,p]) => `<tr><td><span class="rar r-${r}">${r}</span></td><td>${PALS.filter(x=>x.r===r).map(x=>x.e).join(' ')}</td><td>${p}%</td></tr>`).join('')}</tbody></table>
-    <p class="note">ガチャは勉強でもらえる「ガチャ券」だけで引けます。お金はかかりません。<br>ガチャ券は、問題をといた時間 ${TICKET_MIN}分ごとに1枚。勉強として数えるのは1日${DAILY_MIN}分まで（1日に最大${DAILY_MIN / TICKET_MIN}枚）。<br>同じなかまが出たら「かけら」になり、${SHARDS_FOR_FREE}こ集めると1回むりょうで引けます。</p>`;
+    <p class="note">ガチャは勉強でもらえる「ガチャ券」だけで引けます。お金はかかりません。<br>ガチャ券は、問題に正解してためたポイント ${POINTS_PER_TICKET}pt で1枚。復習や、前にまちがえた問題に正解すると多くもらえます。勉強は1日${DAILY_MIN}分までです。<br>同じなかまが出たら「かけら」になり、${SHARDS_FOR_FREE}こ集めると1回むりょうで引けます。</p>`;
   if (last) $('#hearPal').onclick = () => say(last.p.en);
   $('#pull').onclick = () => {
     if (!can) return;
@@ -436,25 +533,27 @@ function renderGacha(last){
 /* ---------- zukan ---------- */
 function renderZukan(){
   const got = PALS.filter(p => S.owned[p.id]).length;
-  const words = Object.keys(S.learned).length;
-  const cleared = Object.keys(S.stars).length;
+  const count = n => ITEMS.filter(id => mOf(id).lv >= n).length;
   $('#view').innerHTML = `
-    <div class="stats"><div class="stat"><b>${words}</b><span>おぼえた単語</span></div>
-      <div class="stat"><b>${got}/${PALS.length}</b><span>なかま</span></div>
-      <div class="stat"><b>${cleared}</b><span>クリアしたマス</span></div></div>
+    <div class="stats"><div class="stat"><b>${count(4)}</b><span>👑 マスター</span></div>
+      <div class="stat"><b>${count(1)}/${ITEMS.length}</b><span>出会った問題</span></div>
+      <div class="stat"><b>${got}/${PALS.length}</b><span>なかま</span></div></div>
+    <div><h2>覚えぐあい</h2><p class="sub">正解すると1つずつ上がるよ。間をあけて何回も思い出すと、👑マスターになるよ。</p></div>
+    <div class="legend">${LV.map((e,i) => `<span>${e} ${LV_NAME[i]}</span>`).join('')}</div>
+    <div class="mlist">${ITEMS.slice().sort((a,b) => mOf(b).lv - mOf(a).lv).map(id => { const it = itemInfo(id), m = mOf(id);
+      return `<button class="mrow" data-say="${esc(it.en)}"><span class="lv">${LV[m.lv]}</span><span class="em">${it.e}</span>
+        <span class="tx"><b class="en">${esc(it.en)}</b><span>${esc(it.ja)}</span></span></button>`; }).join('')}</div>
     <div><h2>なかまずかん</h2><p class="sub">タップすると英語の名前が聞けるよ。もう一度タップでマップにつれていけるよ。</p></div>
     <div class="grid">${PALS.map(p => S.owned[p.id]
       ? `<button class="cell ${S.partner===p.id?'sel':''}" data-id="${p.id}"><span class="rar r-${p.r}">${p.r}</span><span class="em">${p.e}</span><span class="nm en">${p.en}</span><span class="ja">${p.ja}${S.partner===p.id?'・いっしょ':''}</span></button>`
-      : `<div class="cell unk"><span class="rar r-${p.r}">${p.r}</span><span class="em">${p.e}</span><span class="nm">？？？</span><span class="ja">まだ</span></div>`).join('')}</div>
-    <div><h2>おぼえた単語</h2><p class="sub">${words ? '' : '問題に正かいすると、ここにならんでいくよ。'}</p></div>
-    <div class="grid">${Object.keys(S.learned).map(k => WORDS[k] ? `<button class="cell" data-w="${k}"><span class="em">${WORDS[k].e}</span><span class="nm en">${WORDS[k].en}</span><span class="ja">${WORDS[k].ja}</span></button>` : '').join('')}</div>`;
+      : `<div class="cell unk"><span class="rar r-${p.r}">${p.r}</span><span class="em">${p.e}</span><span class="nm">？？？</span><span class="ja">まだ</span></div>`).join('')}</div>`;
   let lastTap = null;
   document.querySelectorAll('.cell[data-id]').forEach(c => c.onclick = () => {
     const p = PALS.find(x => x.id === c.dataset.id); say(p.en);
     if (lastTap === p.id && S.partner !== p.id){ S.partner = p.id; save(); toast(`${p.ja}がマップについてくるよ`); renderZukan(); }
     lastTap = p.id;
   });
-  document.querySelectorAll('.cell[data-w]').forEach(c => c.onclick = () => say(WORDS[c.dataset.w].en));
+  document.querySelectorAll('.mrow').forEach(c => c.onclick = () => say(c.dataset.say));
 }
 
 render();
