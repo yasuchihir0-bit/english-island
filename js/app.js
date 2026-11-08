@@ -58,14 +58,28 @@ const PALS = [
   {id:'dragon',en:'dragon',ja:'ドラゴン',e:'🐉',r:'SSR'},{id:'dinosaur',en:'dinosaur',ja:'きょうりゅう',e:'🦖',r:'SSR'}
 ];
 const ODDS = [['N',60],['R',28],['SR',10],['SSR',2]];
-const COST = 50, DAILY_PULLS = 5, SHARDS_FOR_FREE = 5;
+/* ガチャ券：問題をといた時間 TICKET_MIN 分ごとに1枚。勉強として数えるのは1日 DAILY_MIN 分まで */
+const TICKET_MIN = 5, DAILY_MIN = 60, SHARDS_FOR_FREE = 5;
+const Q_MAX_SEC = 40; // 1問で数える時間の上限（放っておいても増えないように）
 
 /* ---------- state ---------- */
 const KEY = 'english-island-v1';
 const today = () => { const d = new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
-function fresh(){ return {coins:60,stars:{},owned:{},shards:0,pulls:{d:'',n:0},streak:{last:'',n:0},miss:[],learned:{},partner:null}; }
+function fresh(){ return {tickets:1,stars:{},owned:{},shards:0,study:{d:'',sec:0,got:0},streak:{last:'',n:0},miss:[],learned:{},partner:null}; }
 let S = fresh();
-try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(fresh(), JSON.parse(raw)); } catch(e) {}
+try { const raw = localStorage.getItem(KEY); if (raw){ const old = JSON.parse(raw);
+  if (old.tickets === undefined && typeof old.coins === 'number') old.tickets = Math.max(1, Math.floor(old.coins / 50));
+  delete old.coins; delete old.pulls; S = Object.assign(fresh(), old); } } catch(e) {}
+function studyToday(){ if (S.study.d !== today()) S.study = {d:today(), sec:0, got:0}; return S.study; }
+const doneToday = () => studyToday().sec >= DAILY_MIN * 60;
+const fmtTime = sec => { sec = Math.floor(sec); const m = Math.floor(sec/60), s = sec % 60; return m ? `${m}分${s ? s + '秒' : ''}` : `${s}秒`; };
+function addStudy(sec){
+  const st = studyToday(), before = st.sec;
+  st.sec = Math.min(before + Math.min(sec, Q_MAX_SEC), DAILY_MIN * 60);
+  const got = Math.floor(st.sec / (TICKET_MIN * 60)), n = got - st.got;
+  if (n > 0){ S.tickets += n; st.got = got; toast('🎫 ガチャ券ゲット！'); }
+  return {sec: st.sec - before, tickets: Math.max(n,0)};
+}
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} paintBar(); }
 
 /* ---------- helpers ---------- */
@@ -118,7 +132,7 @@ function matchScore(target, alts){
 }
 
 /* ---------- top bar & tabs ---------- */
-function paintBar(){ $('#coins').textContent = S.coins; $('#streak').textContent = S.streak.n; }
+function paintBar(){ $('#coins').textContent = S.tickets; $('#streak').textContent = S.streak.n; }
 let tab = 'map';
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });
 function render(){
@@ -150,6 +164,17 @@ function terrainSVG(){
     <path class="road" d="M${pts}"/><path class="dots" d="M${pts}"/></svg>`;
 }
 
+function studyCard(){
+  const st = studyToday(), max = DAILY_MIN * 60, per = TICKET_MIN * 60, cells = DAILY_MIN / TICKET_MIN;
+  const left = per - (st.sec % per), done = st.sec >= max;
+  return `<div class="study" aria-label="今日の勉強時間">
+    <div class="study-top"><b>⏱️ 今日の勉強 <span class="num">${Math.floor(st.sec/60)}</span>分</b><span class="sub">/ ${DAILY_MIN}分</span>
+      <span class="study-next">${done ? '🎉 今日はここまで！' : `🎫 まで あと ${fmtTime(left)}`}</span></div>
+    <div class="cells" style="grid-template-columns:repeat(${cells},1fr)">${Array.from({length:cells}, (_,i) => { const f = Math.max(0, Math.min(1, (st.sec - i*per) / per));
+      return `<span class="cell-t ${f>=1?'full':''}"><i style="width:${f*100}%"></i>${f>=1?'🎫':''}</span>`; }).join('')}</div>
+    <p class="sub">${done ? 'よくがんばったね！ ガチャ券でなかまを集めよう。また明日ね。' : `問題をといた時間 ${TICKET_MIN}分ごとに ガチャ券が1枚もらえるよ。`}</p>
+  </div>`;
+}
 const unlocked = i => i === 0 || S.stars[STAGES[i-1].id] > 0;
 function renderMap(){
   const nextIdx = STAGES.findIndex((s,i) => unlocked(i) && !S.stars[s.id]);
@@ -158,6 +183,7 @@ function renderMap(){
   $('#view').innerHTML = `
     <div class="areahead"><div><h2>🏘️ はじまりの村</h2><p class="sub">5年｜あいさつ・好きなもの</p></div>
       <span class="tag on">${Object.keys(S.stars).length}/${STAGES.length} クリア</span></div>
+    ${studyCard()}
     <div class="map" role="group" aria-label="はじまりの村のマップ">
       ${terrainSVG()}
       ${SCENERY.map(([e,x,y,sz,c]) => `<span class="deco ${c}" style="left:${x}%;top:${y}%;font-size:${sz}px">${e}</span>`).join('')}
@@ -175,6 +201,7 @@ function renderMap(){
   document.querySelectorAll('.node').forEach(b => b.onclick = () => {
     const i = +b.dataset.i;
     if (!unlocked(i)) return toast('前のマスをクリアすると行けるよ');
+    if (doneToday()) return toast(`今日の勉強は${DAILY_MIN}分でおしまい。また明日ね！`);
     startStage(STAGES[i]);
   });
 }
@@ -214,7 +241,7 @@ function missKey(q){
 /* ---------- quiz run ---------- */
 let run = null;
 function startStage(stage){
-  run = {stage, qs:build(stage), i:0, right:0, hearts:stage.kind==='boss'?3:null, coins:0};
+  run = {stage, qs:build(stage), i:0, right:0, hearts:stage.kind==='boss'?3:null, sec:0, tickets:0, t0:0};
   $('#quiz').hidden = false; document.body.style.overflow = 'hidden';
   showQ();
 }
@@ -234,7 +261,7 @@ function audioRow(text){
 function wireAudio(text){ $('#play').onclick = () => say(text); $('#slow').onclick = () => say(text, .55); }
 
 function showQ(){
-  const q = run.qs[run.i];
+  const q = run.qs[run.i]; run.t0 = Date.now();
   if (q.kind === 'listen'){
     const w = WORDS[q.key];
     shell(`<span class="kind">🔊 聞いてえらぼう</span><p class="prompt">聞こえた英語はどれ？</p>${audioRow()}
@@ -325,13 +352,13 @@ function lockChoices(){ document.querySelectorAll('.ch').forEach(x => x.disabled
 
 function answer(ok, label, speakText){
   const q = run.qs[run.i], mk = missKey(q);
-  const per = run.stage.kind === 'review' ? 10 : 5;
-  if (ok){ run.right++; run.coins += per; if (q.key) S.learned[q.key] = 1; S.miss = S.miss.filter(m => m !== mk); }
+  const gain = addStudy((Date.now() - run.t0) / 1000); run.sec += gain.sec; run.tickets += gain.tickets;
+  if (ok){ run.right++; if (q.key) S.learned[q.key] = 1; S.miss = S.miss.filter(m => m !== mk); }
   else { if (!S.miss.includes(mk)) S.miss.push(mk); if (run.hearts !== null) run.hearts--; }
   save();
   const f = $('#foot'); f.hidden = false; f.className = 'foot ' + (ok ? 'ok' : 'ng');
   const praise = ['すごい！','せいかい！','いいね！','ばっちり！'][Math.floor(Math.random()*4)];
-  f.innerHTML = `<div><div class="fmsg">${ok ? '⭕ ' + praise + ` +${per}🪙` : '❌ おしい！'}<small>${ok ? '' : '正かいは '}${label}</small></div>
+  f.innerHTML = `<div><div class="fmsg">${ok ? '⭕ ' + praise : '❌ おしい！'}<small>${ok ? '' : '正かいは '}${label}</small></div>
     <button class="big ${ok?'alt':''}" id="go">つぎへ</button></div>`;
   if (speakText && !ok) setTimeout(() => say(speakText), 300);
   $('#go').onclick = () => {
@@ -346,13 +373,7 @@ function finish(knocked){
   const s = run.stage, rate = run.right / run.qs.length;
   const stars = knocked ? 0 : rate === 1 ? 3 : rate >= .8 ? 2 : rate >= .6 ? 1 : 0;
   const first = stars > 0 && !S.stars[s.id];
-  let bonus = 0;
-  if (stars > 0){
-    if (first) bonus += s.kind === 'boss' ? 50 : 20;
-    if (stars === 3 && (S.stars[s.id] || 0) < 3) bonus += 10;
-    S.stars[s.id] = Math.max(S.stars[s.id] || 0, stars);
-  }
-  const gained = run.coins + bonus; S.coins += gained;
+  if (stars > 0) S.stars[s.id] = Math.max(S.stars[s.id] || 0, stars);
   const d = today();
   if (S.streak.last !== d){
     const y = new Date(); y.setDate(y.getDate()-1);
@@ -366,40 +387,39 @@ function finish(knocked){
   $('#quiz').innerHTML = `<div class="qbody"><div class="result">
     <div class="stars" aria-label="星 ${stars}">${[0,1,2].map(i => i < stars ? '★' : '<span class="off">★</span>').join('')}</div>
     <h2>${s.ic} ${s.name}</h2><p>${run.right} / ${run.qs.length} 問 正かい</p><p>${msg}</p>
-    <span class="pill">🪙 +${gained}${bonus ? `（ボーナス ${bonus}）` : ''}</span>
+    <span class="pill">⏱️ 勉強 +${fmtTime(run.sec)}${run.tickets ? `　🎫 +${run.tickets}枚` : ''}</span>
+    ${studyCard()}
     <button class="big" id="toGacha">🎰 ガチャへ</button>
-    <button class="big alt" id="retry">もう一回</button>
+    ${doneToday() ? '' : '<button class="big alt" id="retry">もう一回</button>'}
     <button class="ghost" id="toMap">マップにもどる</button></div></div>`;
-  $('#retry').onclick = () => startStage(s);
+  if ($('#retry')) $('#retry').onclick = () => startStage(s);
   $('#toMap').onclick = closeQuiz;
   $('#toGacha').onclick = () => { tab = 'gacha'; closeQuiz(); };
 }
 
 /* ---------- gacha ---------- */
-function pullsLeft(){ if (S.pulls.d !== today()) S.pulls = {d:today(), n:0}; return DAILY_PULLS - S.pulls.n; }
 function renderGacha(last){
-  const left = pullsLeft(), free = S.shards >= SHARDS_FOR_FREE;
-  const can = left > 0 && (free || S.coins >= COST);
+  const free = S.shards >= SHARDS_FOR_FREE, can = free || S.tickets > 0;
+  const st = studyToday(), canEarn = DAILY_MIN / TICKET_MIN - st.got;
   $('#view').innerHTML = `
-    <div class="areahead"><h2>🎰 なかまガチャ</h2><span class="tag">今日あと ${left} 回</span></div>
+    <div class="areahead"><h2>🎰 なかまガチャ</h2><span class="tag on">🎫 ${S.tickets}枚</span></div>
     <div class="machine"><span class="shell" aria-hidden="true">🐚</span>
       ${last ? `<div class="reveal"><span class="rar r-${last.p.r}">${last.p.r}</span><span class="em">${last.p.e}</span>
         <b class="en" style="font-size:28px">${last.p.en}</b><span>${last.p.ja}</span>
         <span class="sub">${last.dup ? 'もう持っているので、かけら +1' : '🎉 新しいなかま！'}</span>
         <button class="ghost" id="hearPal">🔊 英語で聞く</button></div>`
       : `<div class="globe" id="globe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>`}
-      <button class="big" id="pull" ${can ? '' : 'disabled'}>${free ? 'かけら 5こで むりょうで引く' : `🪙 ${COST} で 1回引く`}</button>
-      <div class="meter"><span>🪙 ${S.coins}</span><span>💎 かけら ${S.shards}/${SHARDS_FOR_FREE}</span></div>
-      ${!can ? `<p class="note">${left <= 0 ? '今日の分はおしまい。また明日引けるよ。' : 'コインが足りないよ。マップで問題をといてコインを集めよう。'}</p>` : ''}
+      <button class="big" id="pull" ${can ? '' : 'disabled'}>${free ? 'かけら 5こで むりょうで引く' : '🎫 ガチャ券1枚で引く'}</button>
+      <div class="meter"><span>🎫 ガチャ券 ${S.tickets}枚</span><span>💎 かけら ${S.shards}/${SHARDS_FOR_FREE}</span></div>
+      ${!can ? `<p class="note">${canEarn > 0 ? `ガチャ券がないよ。マップで勉強すると ${TICKET_MIN}分ごとに1枚もらえるよ（今日はあと${canEarn}枚）。` : '今日のガチャ券はもうもらえないよ。また明日勉強しよう！'}</p>` : ''}
     </div>
     <h2>出るかくりつ</h2>
     <table class="odds"><tbody>${ODDS.map(([r,p]) => `<tr><td><span class="rar r-${r}">${r}</span></td><td>${PALS.filter(x=>x.r===r).map(x=>x.e).join(' ')}</td><td>${p}%</td></tr>`).join('')}</tbody></table>
-    <p class="note">ガチャはコインだけで引けます。お金はかかりません。<br>同じなかまが出たら「かけら」になり、5こ集めると1回むりょうで引けます。<br>1日に引けるのは ${DAILY_PULLS} 回までです。</p>`;
+    <p class="note">ガチャは勉強でもらえる「ガチャ券」だけで引けます。お金はかかりません。<br>ガチャ券は、問題をといた時間 ${TICKET_MIN}分ごとに1枚。勉強として数えるのは1日${DAILY_MIN}分まで（1日に最大${DAILY_MIN / TICKET_MIN}枚）。<br>同じなかまが出たら「かけら」になり、${SHARDS_FOR_FREE}こ集めると1回むりょうで引けます。</p>`;
   if (last) $('#hearPal').onclick = () => say(last.p.en);
   $('#pull').onclick = () => {
     if (!can) return;
-    if (free) S.shards -= SHARDS_FOR_FREE; else S.coins -= COST;
-    S.pulls.n++;
+    if (free) S.shards -= SHARDS_FOR_FREE; else S.tickets--;
     let roll = Math.random()*100, rar = 'N';
     for (const [r,p] of ODDS){ if (roll < p){ rar = r; break; } roll -= p; }
     const p = pick(PALS.filter(x => x.r === rar),1)[0];

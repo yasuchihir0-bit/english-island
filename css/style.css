@@ -62,6 +62,15 @@ h2{font-size:17px;margin:0;font-weight:800}
 .node .st{font-size:11px;letter-spacing:1px;color:var(--gold);min-height:14px}
 .partner{position:absolute;font-size:30px;transform:translate(-50%,-50%);z-index:2;pointer-events:none;transition:left .5s,top .5s}
 @keyframes bob{50%{transform:translateY(-6px)}}
+.study{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.study-top{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.study-top .num{font-size:22px;font-variant-numeric:tabular-nums}
+.study-next{margin-left:auto;font-size:13px;font-weight:700;color:var(--coral)}
+.cells{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}
+.cell-t{position:relative;height:22px;border-radius:6px;background:var(--line);overflow:hidden;display:grid;place-items:center;font-size:12px}
+.cell-t i{position:absolute;left:0;top:0;bottom:0;background:var(--gold)}
+.cell-t.full{background:var(--gold)}
+.result .study{width:100%;text-align:left}
 .islands{display:grid;gap:8px}
 .isle{display:flex;align-items:center;gap:12px;background:var(--card);border:2px solid var(--line);border-radius:16px;padding:10px 12px}
 .isle .ic{font-size:26px}
