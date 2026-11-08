@@ -128,19 +128,39 @@ function render(){
 }
 
 /* ---------- map ---------- */
+/* map scenery: x/y in % of the map, size in px; kept clear of the stage path */
+const SCENERY = [
+  ['☀️',90,5,28,'day'],['🌙',90,5,26,'night'],['✨',28,4,14,'night twinkle'],['✨',74,16,12,'night twinkle'],['✨',10,24,12,'night twinkle'],
+  ['☁️',22,4,30,'cloud'],['☁️',66,3,22,'cloud c2'],
+  ['⛵',6,12,26,'bob'],['🐳',90,95,30,'bob'],['🐟',5,93,18,'bob'],['🐬',95,70,20,'bob'],
+  ['🏡',86,27,30,''],['🏠',13,46,26,''],['🏫',88,58,30,''],['🌳',15,31,28,'sway'],['🌲',8,38,22,''],
+  ['🌴',91,44,28,'sway'],['🌴',9,66,26,'sway'],['🦆',55,60,18,'bob'],['🌷',47,46,18,''],['🌼',53,48,15,''],
+  ['🐄',48,71,24,''],['🌻',86,84,22,'sway'],['🍄',15,78,18,''],['🌳',78,93,26,''],['🐚',50,95,16,''],
+  ['🪨',41,15,20,''],['🌲',25,19,22,''],['🦋',62,33,16,'bob'],['🐿️',13,88,18,'']
+];
+function terrainSVG(){
+  const pts = STAGES.map(s => (s.x*3)+','+(s.y*4)).join(' L');
+  const waves = [[20,24],[250,16],[12,170],[276,140],[284,250],[14,300],[30,392],[230,394]]
+    .map(([x,y]) => `<path class="wave" d="M${x} ${y} q6 -5 12 0 t12 0"/>`).join('');
+  return `<svg class="terrain" viewBox="0 0 300 400" aria-hidden="true">${waves}
+    <path class="sand" d="M60 34C120 6 222 10 262 42C296 74 292 140 282 190C300 250 296 322 270 360C240 396 150 394 90 382C38 372 12 332 18 280C4 230 14 170 24 120C24 78 34 50 60 34Z"/>
+    <path class="grass" d="M72 54C126 28 214 32 248 60C276 88 272 146 262 194C280 250 276 316 254 346C228 376 150 372 96 362C56 352 36 320 40 278C26 230 36 172 44 124C44 90 52 66 72 54Z"/>
+    <path class="patch" d="M30 140C40 120 64 116 72 140C78 170 46 196 34 176Z"/><path class="patch" d="M236 300C252 284 272 296 266 318C258 336 232 330 236 300Z"/>
+    <ellipse class="pond" cx="165" cy="242" rx="24" ry="13"/>
+    <path class="road" d="M${pts}"/><path class="dots" d="M${pts}"/></svg>`;
+}
+
 const unlocked = i => i === 0 || S.stars[STAGES[i-1].id] > 0;
 function renderMap(){
   const nextIdx = STAGES.findIndex((s,i) => unlocked(i) && !S.stars[s.id]);
   const here = STAGES[nextIdx >= 0 ? nextIdx : STAGES.length-1];
   const pal = S.partner && PALS.find(p => p.id === S.partner);
-  const pts = STAGES.map(s => s.x+' '+s.y);
   $('#view').innerHTML = `
     <div class="areahead"><div><h2>🏘️ はじまりの村</h2><p class="sub">5年｜あいさつ・好きなもの</p></div>
       <span class="tag on">${Object.keys(S.stars).length}/${STAGES.length} クリア</span></div>
     <div class="map" role="group" aria-label="はじまりの村のマップ">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M${pts.join(' L')}"/></svg>
-      <span class="deco" style="left:8%;top:58%">🌴</span><span class="deco" style="left:82%;top:88%">🌴</span>
-      <span class="deco" style="left:84%;top:24%">🏠</span><span class="deco" style="left:10%;top:16%">⛵</span>
+      ${terrainSVG()}
+      ${SCENERY.map(([e,x,y,sz,c]) => `<span class="deco ${c}" style="left:${x}%;top:${y}%;font-size:${sz}px">${e}</span>`).join('')}
       ${STAGES.map((s,i) => {
         const lock = !unlocked(i), st = S.stars[s.id] || 0;
         return `<button class="node ${s.kind==='boss'?'boss':''} ${lock?'locked':''} ${i===nextIdx?'next':''}" style="left:${s.x}%;top:${s.y}%" data-i="${i}" aria-label="${s.name}${lock?'（まだ行けない）':''}">
@@ -362,7 +382,7 @@ function renderGacha(last){
   const can = left > 0 && (free || S.coins >= COST);
   $('#view').innerHTML = `
     <div class="areahead"><h2>🎰 なかまガチャ</h2><span class="tag">今日あと ${left} 回</span></div>
-    <div class="machine">
+    <div class="machine"><span class="shell" aria-hidden="true">🐚</span>
       ${last ? `<div class="reveal"><span class="rar r-${last.p.r}">${last.p.r}</span><span class="em">${last.p.e}</span>
         <b class="en" style="font-size:28px">${last.p.en}</b><span>${last.p.ja}</span>
         <span class="sub">${last.dup ? 'もう持っているので、かけら +1' : '🎉 新しいなかま！'}</span>
